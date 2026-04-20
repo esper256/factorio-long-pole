@@ -1,12 +1,13 @@
 local tracker = require("split_tracker")
-local plan_loader = require("plan_loader")
+local plan_storage = require("plan_storage")
 
 describe("split_tracker", function()
   local function initialized_state_with_plan()
     local state = {}
     tracker.init(state)
-    plan_loader.ensure_plan_loaded(state)
-    tracker.init(state)
+    plan_storage.create_new_plan(state)
+    tracker.add_split(state, "Starter Burners")
+    tracker.add_split(state, "First Power")
     return state
   end
 
@@ -21,16 +22,70 @@ describe("split_tracker", function()
     assert.are.equal(0, #state.splits)
   end)
 
-  it("loads sample plan data through the plan loader interface", function()
+  it("creates an empty active plan through the storage layer", function()
     local state = {}
     tracker.init(state)
 
-    assert.is_true(plan_loader.ensure_plan_loaded(state))
+    assert.is_true(plan_storage.create_new_plan(state))
+
+    assert.are.equal("new", state.plan_source)
+    assert.are.equal("Untitled Plan", state.plan_name)
+    assert.are.equal(0, #state.splits)
+    assert.is_false(plan_storage.has_active_plan(state))
+  end)
+
+  it("derives split viewer button state from active splits instead of a loaded flag", function()
+    local state = {}
     tracker.init(state)
 
-    assert.are.equal("sample-plan", state.plan_source)
-    assert.are.equal("Starter Burners", state.splits[1].name)
-    assert.are.equal("First Power", state.splits[2].name)
+    local player_without_book = {
+      cursor_stack = {
+        valid_for_read = false
+      }
+    }
+    local new_spec = plan_storage.entry_button_spec(player_without_book, state)
+    assert.are.equal("new", new_spec.mode)
+    assert.are.equal("New Plan", new_spec.caption)
+
+    tracker.add_split(state, "Starter Burners")
+    local edit_spec = plan_storage.entry_button_spec(player_without_book, state)
+    assert.is_true(plan_storage.has_active_plan(state))
+    assert.are.equal("edit", edit_spec.mode)
+    assert.are.equal("✎", edit_spec.caption)
+  end)
+
+  it("allows export into an empty cursor or the active plan's own exported book", function()
+    local state = {}
+    tracker.init(state)
+    plan_storage.create_new_plan(state)
+
+    local empty_cursor = {
+      valid_for_read = false
+    }
+    assert.is_true(plan_storage.can_export_to_cursor(empty_cursor, state))
+
+    local matching_book = {
+      valid_for_read = true,
+      get_tag = function(tag_name)
+        assert.are.equal("long-pole.plan_book", tag_name)
+        return {
+          format = "long-pole-plan",
+          plan_id = state.plan_id
+        }
+      end
+    }
+    assert.is_true(plan_storage.can_export_to_cursor(matching_book, state))
+
+    local different_book = {
+      valid_for_read = true,
+      get_tag = function(_tag_name)
+        return {
+          format = "long-pole-plan",
+          plan_id = "different-plan"
+        }
+      end
+    }
+    assert.is_false(plan_storage.can_export_to_cursor(different_book, state))
   end)
 
   it("advances split index without running past the final split", function()
@@ -64,5 +119,73 @@ describe("split_tracker", function()
     assert.are.equal("Starter Burners", status.previous.name)
     assert.are.equal("First Power", status.current.name)
     assert.are.equal("Labs", status.upcoming[1].name)
+  end)
+
+  it("updates split fields and supports reordering", function()
+    local state = initialized_state_with_plan()
+    local first_id = state.splits[1].id
+
+    assert.is_true(tracker.set_split_blueprints(state, 1, {
+      {name = "Burner Opener"},
+      {name = "Coal Line"}
+    }))
+    assert.is_true(tracker.set_split_items(state, 1, {
+      {name = "iron-gear-wheel", count = 10}
+    }))
+    assert.is_true(tracker.set_split_technologies(state, 1, {
+      {name = "automation"}
+    }))
+    assert.is_true(tracker.set_split_notes(state, 1, "Feed gears before circuits."))
+
+    assert.are.equal("Burner Opener", state.splits[1].blueprints[1].name)
+    assert.are.equal(10, state.splits[1].items[1].count)
+    assert.are.equal("automation", state.splits[1].technologies[1].name)
+    assert.are.equal("Feed gears before circuits.", state.splits[1].notes)
+
+    assert.are.equal(1, tracker.find_split_index_by_id(state, first_id))
+    assert.is_true(tracker.move_split(state, 1, 2))
+    assert.are.equal("Starter Burners", state.splits[2].name)
+    assert.are.equal(2, tracker.find_split_index_by_id(state, first_id))
+  end)
+
+  it("supports blueprint linking and item picker style updates", function()
+    local state = initialized_state_with_plan()
+    local split_id = state.splits[1].id
+
+    assert.is_true(tracker.add_split_blueprint_by_id(state, split_id, {
+      name = "Starter burner pair",
+      export_string = "blueprint-data",
+      entity_count = 4,
+      entity_summary = {
+        {name = "burner-mining-drill", count = 2},
+        {name = "stone-furnace", count = 2}
+      }
+    }))
+    assert.are.equal(1, #state.splits[1].blueprints)
+    assert.are.equal(2, state.splits[1].blueprints[1].entity_summary[1].count)
+
+    assert.is_true(tracker.replace_split_blueprint_by_id(state, split_id, 1, {
+      name = "Starter burner pair v2",
+      export_string = "blueprint-data-v2",
+      entity_count = 5,
+      entity_summary = {
+        {name = "burner-mining-drill", count = 3},
+        {name = "stone-furnace", count = 2}
+      }
+    }))
+    assert.are.equal("Starter burner pair v2", state.splits[1].blueprints[1].name)
+    assert.are.equal("burner-mining-drill", state.splits[1].blueprints[1].entity_summary[1].name)
+
+    assert.is_true(tracker.add_split_item_by_id(state, split_id, {count = 1}))
+    assert.is_true(tracker.set_split_item_name_by_id(state, split_id, 1, "transport-belt"))
+    assert.is_true(tracker.set_split_item_count_by_id(state, split_id, 1, "200"))
+    assert.are.equal("transport-belt", state.splits[1].items[1].name)
+    assert.are.equal(200, state.splits[1].items[1].count)
+
+    assert.is_true(tracker.remove_split_blueprint_by_id(state, split_id, 1))
+    assert.are.equal(0, #state.splits[1].blueprints)
+
+    assert.is_true(tracker.remove_split_item_by_id(state, split_id, 1))
+    assert.are.equal(0, #state.splits[1].items)
   end)
 end)
