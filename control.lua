@@ -69,6 +69,10 @@ script.on_event(defines.events.on_player_cursor_stack_changed, function(event)
   refresh_player(game.get_player(event.player_index))
 end)
 
+script.on_nth_tick(30, function()
+  refresh_all_players()
+end)
+
 script.on_event(defines.events.on_gui_click, function(event)
   local element = event.element
   if not (element and element.valid) then

@@ -138,7 +138,7 @@ describe("build_requirements", function()
 
   it("expands a single recipe layer into raw resources", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {
         {
           entity_summary = {
@@ -155,10 +155,10 @@ describe("build_requirements", function()
           {kind = "item", name = entity_name, count = 1}
         }
       end,
-      resolve_recipe_set = function(kind, name, planet_name)
+      resolve_recipe_set = function(kind, name, surface_name)
         assert.are.equal("item", kind)
         assert.are.equal("stone-furnace", name)
-        assert.are.equal("nauvis", planet_name)
+        assert.are.equal("nauvis", surface_name)
         return {
           {
             ingredients = {
@@ -178,9 +178,9 @@ describe("build_requirements", function()
     assert.are.equal(105, summary[1].count)
   end)
 
-  it("prefers the recipe that yields fewer raw resources on the selected planet", function()
+  it("prefers the recipe that yields fewer raw resources on the selected surface", function()
     local split = {
-      planet = "gleba",
+      surface = "gleba",
       blueprints = {},
       items = {
         {name = "nutrients", count = 10}
@@ -188,9 +188,9 @@ describe("build_requirements", function()
     }
 
     local summary = build_requirements.summarize_raw_cost(split, {
-      resolve_recipe_set = function(kind, name, planet_name)
+      resolve_recipe_set = function(kind, name, surface_name)
         assert.are.equal("item", kind)
-        assert.are.equal("gleba", planet_name)
+        assert.are.equal("gleba", surface_name)
         if name ~= "nutrients" then
           return {}
         end
@@ -223,7 +223,7 @@ describe("build_requirements", function()
 
   it("omits Nauvis water from displayed raw costs", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "steam", count = 100}
@@ -231,7 +231,7 @@ describe("build_requirements", function()
     }
 
     local summary = build_requirements.summarize_raw_cost(split, {
-      resolve_recipe_set = function(_kind, _name, _planet_name)
+      resolve_recipe_set = function(_kind, _name, _surface_name)
         return {
           {
             ingredients = {
@@ -250,7 +250,7 @@ describe("build_requirements", function()
 
   it("recursively expands through multiple crafting layers into raw resources", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "transport-belt", count = 4}
@@ -303,7 +303,7 @@ describe("build_requirements", function()
 
   it("uses product amount and probability when expanding recipe costs", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "processing-unit", count = 2}
@@ -345,7 +345,7 @@ describe("build_requirements", function()
 
   it("expands research science packs into raw resources", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {},
       technologies = {
@@ -426,7 +426,7 @@ describe("build_requirements", function()
 
   it("returns an error when no recipe exists", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "mystery-component", count = 3}
@@ -446,7 +446,7 @@ describe("build_requirements", function()
 
   it("returns an error when recipe expansion hits a cycle", function()
     local split = {
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "loop-a", count = 2}
@@ -486,7 +486,7 @@ describe("build_requirements", function()
     assert.is_truthy(error_message:match("recipe cycle"))
   end)
 
-  it("filters prototype recipes by the selected planet surface conditions", function()
+  it("filters prototype recipes by the selected surface conditions", function()
     _G.prototypes = {
       recipe = {
         ["steam-on-nauvis"] = {
@@ -527,7 +527,7 @@ describe("build_requirements", function()
     }
 
     local nauvis_summary = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "steam-core", count = 2}
@@ -535,7 +535,7 @@ describe("build_requirements", function()
     })
 
     local vulcanus_summary = build_requirements.summarize_raw_cost({
-      planet = "vulcanus",
+      surface = "vulcanus",
       blueprints = {},
       items = {
         {name = "steam-core", count = 2}
@@ -584,7 +584,7 @@ describe("build_requirements", function()
     }
 
     local summary = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "iron-gear-wheel", count = 3}
@@ -596,7 +596,7 @@ describe("build_requirements", function()
     }, summary_by_key(summary))
   end)
 
-  it("filters recycling-or-hand-crafting recipes off non-fulgora planets", function()
+  it("filters recycling-or-hand-crafting recipes off non-fulgora surfaces", function()
     _G.prototypes = {
       recipe = {
         ["automation-science-pack-recycling"] = {
@@ -649,7 +649,7 @@ describe("build_requirements", function()
     }
 
     local summary = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "automation-science-pack", count = 2}
@@ -662,7 +662,7 @@ describe("build_requirements", function()
     }, summary_by_key(summary))
   end)
 
-  it("rejects categories that are not explicitly allowed on the selected planet", function()
+  it("rejects categories that are not explicitly allowed on the selected surface", function()
     _G.prototypes = {
       recipe = {
         ["iron-plate-crushing"] = {
@@ -678,7 +678,7 @@ describe("build_requirements", function()
     }
 
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "iron-plate", count = 1}
@@ -716,7 +716,7 @@ describe("build_requirements", function()
     }
 
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "plastic-bar", count = 4}
@@ -764,7 +764,7 @@ describe("build_requirements", function()
     }
 
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "transport-belt", count = 4}
@@ -813,7 +813,7 @@ describe("build_requirements", function()
     }
 
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "transport-belt", count = 4}
@@ -861,7 +861,7 @@ describe("build_requirements", function()
     }
 
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "transport-belt", count = 4}
@@ -876,7 +876,7 @@ describe("build_requirements", function()
 
   it("treats the current Gleba egg item as a raw resource", function()
     local split = {
-      planet = "gleba",
+      surface = "gleba",
       blueprints = {},
       items = {
         {name = "bioflux", count = 6}
@@ -908,7 +908,7 @@ describe("build_requirements", function()
 
   it("ignores explicitly blocked prototypes when summarizing raw cost", function()
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {},
       items = {
         {name = "loader", count = 2},
@@ -928,7 +928,7 @@ describe("build_requirements", function()
 
   it("returns an error when raw cost receives an unresolved entity marker", function()
     local summary, error_message = build_requirements.summarize_raw_cost({
-      planet = "nauvis",
+      surface = "nauvis",
       blueprints = {
         {
           entity_summary = {

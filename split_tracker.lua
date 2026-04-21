@@ -60,7 +60,9 @@ local function normalize_split(split, fallback_name)
   split.blueprints = copy_entries(split.blueprints)
   split.technologies = copy_entries(split.technologies)
   split.notes = split.notes or ""
-  split.planet = split.planet or "nauvis"
+  split.completed_elapsed_ticks = split.completed_elapsed_ticks or nil
+  split.surface = split.surface or split.planet or "nauvis"
+  split.planet = nil
   return split
 end
 
@@ -72,8 +74,8 @@ local function clamp_current_index(state)
 
   if state.current_split_index < 1 then
     state.current_split_index = 1
-  elseif state.current_split_index > #state.splits then
-    state.current_split_index = #state.splits
+  elseif state.current_split_index > (#state.splits + 1) then
+    state.current_split_index = #state.splits + 1
   end
 end
 
@@ -81,6 +83,7 @@ function M.init(state)
   state.inventory = state.inventory or {}
   state.splits = state.splits or {}
   state.current_split_index = state.current_split_index or 1
+  state.current_split_started_tick = state.current_split_started_tick
   state.editor_selection = state.editor_selection or {}
   state.entity_events = state.entity_events or {}
   ensure_next_split_id(state)
@@ -95,6 +98,30 @@ function M.init(state)
   end
 
   clamp_current_index(state)
+end
+
+function M.ensure_current_split_started(state, current_tick)
+  clamp_current_index(state)
+  if #state.splits == 0 or state.current_split_index > #state.splits then
+    state.current_split_started_tick = nil
+    return nil
+  end
+
+  if state.current_split_started_tick == nil then
+    state.current_split_started_tick = current_tick or 0
+  end
+
+  return state.current_split_started_tick
+end
+
+function M.current_split_elapsed_ticks(state, current_tick)
+  local started_tick = M.ensure_current_split_started(state, current_tick)
+  if started_tick == nil then
+    return nil
+  end
+
+  local resolved_tick = current_tick or started_tick
+  return math.max(0, resolved_tick - started_tick)
 end
 
 function M.create_split(state, name)
@@ -124,7 +151,10 @@ function M.get_selected_split_index(state, player_index)
   if selected and state.splits[selected] then
     return selected
   end
-  return state.current_split_index
+  if #state.splits == 0 then
+    return state.current_split_index
+  end
+  return math.min(state.current_split_index, #state.splits)
 end
 
 function M.find_split_index_by_id(state, split_id)
@@ -372,23 +402,23 @@ function M.remove_split_technology_by_id(state, split_id, technology_index)
   return true
 end
 
-function M.set_split_planet(state, split_index, planet_name)
+function M.set_split_surface(state, split_index, surface_name)
   local split = state.splits[split_index]
-  if not split or not planet_name or planet_name == "" then
+  if not split or not surface_name or surface_name == "" then
     return false
   end
 
-  split.planet = planet_name
+  split.surface = surface_name
   return true
 end
 
-function M.set_split_planet_by_id(state, split_id, planet_name)
+function M.set_split_surface_by_id(state, split_id, surface_name)
   local split_index = M.find_split_index_by_id(state, split_id)
   if not split_index then
     return false
   end
 
-  return M.set_split_planet(state, split_index, planet_name)
+  return M.set_split_surface(state, split_index, surface_name)
 end
 
 function M.move_split(state, from_index, to_index)
@@ -423,6 +453,49 @@ function M.move_split(state, from_index, to_index)
 
   clamp_current_index(state)
   return true
+end
+
+function M.remove_split(state, split_index)
+  if not state.splits[split_index] then
+    return false
+  end
+
+  table.remove(state.splits, split_index)
+
+  local split_count = #state.splits
+
+  if state.current_split_index == split_index then
+    if split_count == 0 then
+      state.current_split_index = 1
+      state.current_split_started_tick = nil
+    elseif split_index > split_count then
+      state.current_split_index = split_count
+    end
+  elseif state.current_split_index > split_index then
+    state.current_split_index = state.current_split_index - 1
+  end
+
+  for player_index, selected_index in pairs(state.editor_selection) do
+    if selected_index > split_index then
+      state.editor_selection[player_index] = selected_index - 1
+    elseif split_count == 0 then
+      state.editor_selection[player_index] = nil
+    elseif selected_index > split_count then
+      state.editor_selection[player_index] = split_count
+    end
+  end
+
+  clamp_current_index(state)
+  return true
+end
+
+function M.remove_split_by_id(state, split_id)
+  local split_index = M.find_split_index_by_id(state, split_id)
+  if not split_index then
+    return false
+  end
+
+  return M.remove_split(state, split_index)
 end
 
 function M.on_entity_changed(state, event)
@@ -470,10 +543,10 @@ function M.get_split_status(state)
     local status = {
       index = index,
       name = split.name,
-      delta_caption = "--",
       missing = summarize_requirements(split),
       is_current = index == current_index,
-      is_complete = #split.items == 0 and #split.blueprints == 0 and #split.technologies == 0
+      is_ready_to_complete = #split.items == 0 and #split.blueprints == 0 and #split.technologies == 0,
+      completed_elapsed_ticks = split.completed_elapsed_ticks
     }
 
     if index == current_index - 1 then
@@ -488,13 +561,26 @@ function M.get_split_status(state)
   return statuses
 end
 
-function M.advance_split(state)
+function M.advance_split(state, current_tick)
   clamp_current_index(state)
-  if state.current_split_index < #state.splits then
-    state.current_split_index = state.current_split_index + 1
+  local current_index = state.current_split_index
+  local current_split = state.splits[current_index]
+  if not current_split then
+    return false
+  end
+
+  local finished_tick = current_tick or state.current_split_started_tick or 0
+  current_split.completed_elapsed_ticks = M.current_split_elapsed_ticks(state, finished_tick) or 0
+
+  if current_index < #state.splits then
+    state.current_split_index = current_index + 1
+    state.current_split_started_tick = current_tick or nil
     return true
   end
-  return false
+
+  state.current_split_index = #state.splits + 1
+  state.current_split_started_tick = nil
+  return true
 end
 
 return M

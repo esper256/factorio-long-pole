@@ -1,10 +1,13 @@
 describe("source guards", function()
   local runtime_lua_files = {
+    "blueprint_library.lua",
+    "blueprint_snapshot.lua",
     "control.lua",
     "gui/plan_editor.lua",
     "gui/split_viewer.lua",
     "plan_storage.lua",
-    "split_tracker.lua"
+    "split_tracker.lua",
+    "util/description_codec.lua"
   }
 
   local function read_lines(path)

@@ -8,6 +8,20 @@ M.root_name = "long_pole_split_viewer"
 M.open_editor_button_name = "long_pole_open_plan_editor"
 M.advance_split_button_name = "long_pole_advance_split"
 
+local function format_elapsed_ticks(elapsed_ticks)
+  local total_seconds = math.floor((elapsed_ticks or 0) / 60)
+  local minutes = math.floor(total_seconds / 60)
+  local seconds = total_seconds % 60
+  local hours = math.floor(minutes / 60)
+  minutes = minutes % 60
+
+  if hours > 0 then
+    return ("%d:%02d:%02d"):format(hours, minutes, seconds)
+  end
+
+  return ("%02d:%02d"):format(minutes, seconds)
+end
+
 local function destroy_children(element)
   for _, child in pairs(element.children) do
     child.destroy()
@@ -50,32 +64,42 @@ local function add_split_row(parent, status)
     name_label.style = "bold_label"
   end
 
-  local delta_label = row.add({
-    type = "label",
-    caption = status.delta_caption
-  })
-  delta_label.style.minimal_width = 45
-  delta_label.style.font_color = {0.75, 0.75, 0.75}
+  if status.is_current then
+    local stopwatch_button = row.add({
+      type = "button",
+      name = M.advance_split_button_name,
+      caption = format_elapsed_ticks(status.elapsed_ticks or 0)
+    })
+    stopwatch_button.style.minimal_width = 58
+    stopwatch_button.style.left_margin = 4
+    stopwatch_button.tooltip = status.is_ready_to_complete
+      and "Stop the stopwatch and complete this split."
+      or "Stop the stopwatch and advance to the next split."
+    if status.is_ready_to_complete then
+      stopwatch_button.style.font_color = {0.3, 0.8, 0.3}
+    end
+  elseif status.completed_elapsed_ticks ~= nil then
+    local elapsed_label = row.add({
+      type = "label",
+      caption = format_elapsed_ticks(status.completed_elapsed_ticks)
+    })
+    elapsed_label.style.minimal_width = 45
+    elapsed_label.style.font_color = {0.75, 0.75, 0.75}
+  else
+    local spacer = row.add({
+      type = "empty-widget"
+    })
+    spacer.style.minimal_width = 45
+    spacer.style.width = 45
+    spacer.style.height = 1
+  end
 
   local requirements_label = row.add({
     type = "label",
     caption = format_missing_items(status.missing)
   })
-  requirements_label.style.maximal_width = 260
   requirements_label.style.horizontally_stretchable = true
   requirements_label.style.font_color = status.is_current and {1, 1, 1} or {0.85, 0.85, 0.85}
-
-  if status.is_current then
-    local button = row.add({
-      type = "button",
-      name = M.advance_split_button_name,
-      caption = status.is_complete and "Complete" or "Advance"
-    })
-    button.style.left_margin = 4
-    if status.is_complete then
-      button.style.font_color = {0.3, 0.8, 0.3}
-    end
-  end
 end
 
 function M.refresh(player, state)
@@ -97,23 +121,28 @@ function M.refresh(player, state)
   })
   header.style.horizontally_stretchable = true
 
-  local title = header.add({
-    type = "label",
-    caption = "Long Pole Splits"
-  })
-  title.style = "heading_2_label"
-
   local entry_button = plan_storage.entry_button_spec(player, state)
   local open_editor = header.add({
     type = "button",
     name = M.open_editor_button_name,
     caption = entry_button.caption
   })
-  open_editor.style.left_margin = 8
   open_editor.tooltip = entry_button.tooltip
   if entry_button.is_compact then
-    open_editor.style.width = 30
+    open_editor.style.width = 28
+    open_editor.style.height = 28
+    open_editor.style.left_padding = 0
+    open_editor.style.right_padding = 0
+    open_editor.style.top_padding = 0
+    open_editor.style.bottom_padding = 0
   end
+
+  local title = header.add({
+    type = "label",
+    caption = "Splits"
+  })
+  title.style = "heading_2_label"
+  title.style.left_margin = 6
 
   local body = frame.add({
     type = "flow",
@@ -121,7 +150,12 @@ function M.refresh(player, state)
   })
   body.style.top_margin = 6
 
+  local current_tick = game and game.tick or 0
+  tracker.ensure_current_split_started(state, current_tick)
   local status = tracker.get_split_status(state)
+  if status.current then
+    status.current.elapsed_ticks = tracker.current_split_elapsed_ticks(state, current_tick)
+  end
   add_split_row(body, status.previous)
   add_split_row(body, status.current)
   for _, split_status in ipairs(status.upcoming) do
@@ -129,19 +163,26 @@ function M.refresh(player, state)
   end
 end
 
-function M.handle_click(player, state, element)
+function M.handle_click(player, state, element, event)
   if element.name == M.open_editor_button_name then
+    if plan_storage.importable_plan_from_player(player) then
+      local ok, error_message = plan_storage.import_plan_from_cursor(player, state)
+      if not ok then
+        player.print(error_message)
+        return false
+      end
+
+      plan_editor.open(player, state)
+      return true
+    end
+
     if plan_storage.has_active_plan(state) then
       plan_editor.open(player, state)
       return true
     end
 
-    local ok, error_message
-    if plan_storage.is_importable_plan_book(player.cursor_stack) then
-      ok, error_message = plan_storage.import_plan_from_cursor(player, state)
-    else
-      ok = plan_storage.create_new_plan(state)
-    end
+    local ok = plan_storage.create_new_plan(state)
+    local error_message = nil
 
     if not ok then
       player.print(error_message)
@@ -153,7 +194,7 @@ function M.handle_click(player, state, element)
   end
 
   if element.name == M.advance_split_button_name then
-    tracker.advance_split(state)
+    tracker.advance_split(state, event and event.tick or nil)
     return true
   end
 

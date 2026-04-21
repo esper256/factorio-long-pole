@@ -45,13 +45,39 @@ describe("split_tracker", function()
     }
     local new_spec = plan_storage.entry_button_spec(player_without_book, state)
     assert.are.equal("new", new_spec.mode)
-    assert.are.equal("New Plan", new_spec.caption)
+    assert.are.equal("✎", new_spec.caption)
 
     tracker.add_split(state, "Starter Burners")
     local edit_spec = plan_storage.entry_button_spec(player_without_book, state)
     assert.is_true(plan_storage.has_active_plan(state))
     assert.are.equal("edit", edit_spec.mode)
     assert.are.equal("✎", edit_spec.caption)
+
+    local player_with_import_book = {
+      cursor_stack = {
+        valid_for_read = true,
+        is_blueprint_book = true,
+        blueprint_description = "format=long-pole-plan;version=1\nplan_id=import-me\nvisibility=references-only\ndefault_surface=nauvis\n"
+      }
+    }
+    local import_spec = plan_storage.entry_button_spec(player_with_import_book, state)
+    assert.are.equal("import", import_spec.mode)
+    assert.are.equal("↓", import_spec.caption)
+
+    local player_with_import_record = {
+      cursor_stack = {
+        valid_for_read = false
+      },
+      cursor_record = {
+        valid = true,
+        type = "blueprint-book",
+        blueprint_description = "format=long-pole-plan;version=1\nplan_id=record-import\nvisibility=references-only\ndefault_surface=nauvis\n",
+        contents = {}
+      }
+    }
+    local record_import_spec = plan_storage.entry_button_spec(player_with_import_record, state)
+    assert.are.equal("import", record_import_spec.mode)
+    assert.are.equal("↓", record_import_spec.caption)
   end)
 
   it("allows export into an empty cursor or the active plan's own exported book", function()
@@ -66,37 +92,60 @@ describe("split_tracker", function()
 
     local matching_book = {
       valid_for_read = true,
-      get_tag = function(tag_name)
-        assert.are.equal("long-pole.plan_book", tag_name)
-        return {
-          format = "long-pole-plan",
-          plan_id = state.plan_id
-        }
-      end
+      is_blueprint_book = true,
+      blueprint_description = ("format=long-pole-plan;version=1\nplan_id=%s\nvisibility=references-only\ndefault_surface=nauvis\n"):format(state.plan_id)
     }
     assert.is_true(plan_storage.can_export_to_cursor(matching_book, state))
 
     local different_book = {
       valid_for_read = true,
-      get_tag = function(_tag_name)
-        return {
-          format = "long-pole-plan",
-          plan_id = "different-plan"
-        }
-      end
+      is_blueprint_book = true,
+      blueprint_description = "format=long-pole-plan;version=1\nplan_id=different-plan\nvisibility=references-only\ndefault_surface=nauvis\n"
     }
     assert.is_false(plan_storage.can_export_to_cursor(different_book, state))
   end)
 
-  it("advances split index without running past the final split", function()
+  it("advances through the plan and marks the final split complete", function()
     local state = initialized_state_with_plan()
 
     assert.is_true(tracker.advance_split(state))
     assert.are.equal(2, state.current_split_index)
 
-    state.current_split_index = #state.splits
-    assert.is_false(tracker.advance_split(state))
-    assert.are.equal(#state.splits, state.current_split_index)
+    state.current_split_started_tick = 120
+    assert.is_true(tracker.advance_split(state, 300))
+    assert.are.equal(#state.splits + 1, state.current_split_index)
+    assert.are.equal(180, state.splits[#state.splits].completed_elapsed_ticks)
+  end)
+
+  it("tracks elapsed ticks for the current split and resets when advancing", function()
+    local state = initialized_state_with_plan()
+
+    tracker.ensure_current_split_started(state, 0)
+    assert.are.equal(300, tracker.current_split_elapsed_ticks(state, 300))
+    assert.are.equal(0, state.current_split_started_tick)
+    assert.are.equal(390, tracker.current_split_elapsed_ticks(state, 390))
+
+    assert.is_true(tracker.advance_split(state, 390))
+    assert.are.equal(2, state.current_split_index)
+    assert.are.equal(390, state.current_split_started_tick)
+    assert.are.equal(60, tracker.current_split_elapsed_ticks(state, 450))
+    assert.are.equal(390, state.splits[1].completed_elapsed_ticks)
+  end)
+
+  it("marks the final split complete and leaves no current split", function()
+    local state = initialized_state_with_plan()
+    state.current_split_index = 2
+    state.current_split_started_tick = 600
+
+    assert.is_true(tracker.advance_split(state, 840))
+    assert.are.equal(3, state.current_split_index)
+    assert.is_nil(state.current_split_started_tick)
+    assert.are.equal(240, state.splits[2].completed_elapsed_ticks)
+
+    local status = tracker.get_split_status(state)
+    assert.are.equal("First Power", status.previous.name)
+    assert.are.equal(240, status.previous.completed_elapsed_ticks)
+    assert.is_nil(status.current)
   end)
 
   it("adds and renames splits", function()
@@ -148,13 +197,49 @@ describe("split_tracker", function()
     assert.are.equal(2, tracker.find_split_index_by_id(state, first_id))
   end)
 
-  it("stores a planet per split", function()
+  it("removes splits and keeps current and selected indexes aligned", function()
+    local state = initialized_state_with_plan()
+    tracker.add_split(state, "Labs")
+    state.current_split_index = 2
+    state.editor_selection[1] = 3
+    state.editor_selection[2] = 2
+
+    assert.is_true(tracker.remove_split(state, 2))
+
+    assert.are.equal(2, #state.splits)
+    assert.are.equal("Starter Burners", state.splits[1].name)
+    assert.are.equal("Labs", state.splits[2].name)
+    assert.are.equal(2, state.current_split_index)
+    assert.are.equal(2, state.editor_selection[1])
+    assert.are.equal(2, state.editor_selection[2])
+  end)
+
+  it("removes the final split by id and clears stale editor selection", function()
+    local state = initialized_state_with_plan()
+    local second_id = state.splits[2].id
+    state.current_split_index = 2
+    state.editor_selection[1] = 2
+
+    assert.is_true(tracker.remove_split_by_id(state, second_id))
+
+    assert.are.equal(1, #state.splits)
+    assert.are.equal("Starter Burners", state.splits[1].name)
+    assert.are.equal(1, state.current_split_index)
+    assert.are.equal(1, state.editor_selection[1])
+
+    assert.is_true(tracker.remove_split(state, 1))
+    assert.are.equal(0, #state.splits)
+    assert.are.equal(1, state.current_split_index)
+    assert.is_nil(state.editor_selection[1])
+  end)
+
+  it("stores a surface per split", function()
     local state = initialized_state_with_plan()
     local split_id = state.splits[1].id
 
-    assert.are.equal("nauvis", state.splits[1].planet)
-    assert.is_true(tracker.set_split_planet_by_id(state, split_id, "gleba"))
-    assert.are.equal("gleba", state.splits[1].planet)
+    assert.are.equal("nauvis", state.splits[1].surface)
+    assert.is_true(tracker.set_split_surface_by_id(state, split_id, "gleba"))
+    assert.are.equal("gleba", state.splits[1].surface)
   end)
 
   it("supports blueprint linking and item picker style updates", function()

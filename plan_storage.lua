@@ -1,83 +1,194 @@
+local blueprint_snapshot = require("blueprint_snapshot")
+local description_codec = require("util.description_codec")
 local tracker = require("split_tracker")
 
 local M = {}
 
-local PLAN_FORMAT = "long-pole-plan"
-local SCHEMA_VERSION = 1
-local PLAN_CHUNK_TAG = "long-pole.plan_chunk"
-local PLAN_BOOK_TAG = "long-pole.plan_book"
 local DEFAULT_PLAN_NAME = "Untitled Plan"
-local CHUNK_SIZE = 12000
 
-local function shallow_copy_entries(entries)
-  local copied = {}
-  for index, entry in ipairs(entries or {}) do
-    local entry_copy = {}
-    for key, value in pairs(entry) do
-      entry_copy[key] = value
+local function safe_index(root, key)
+  if root == nil then
+    return nil
+  end
+
+  local ok, value = pcall(function()
+    return root[key]
+  end)
+  if ok then
+    return value
+  end
+
+  return nil
+end
+
+local function item_main_inventory_id()
+  if defines and defines.inventory and defines.inventory.item_main then
+    return defines.inventory.item_main
+  end
+
+  return 1
+end
+
+local function inventory_slot_limit(inventory)
+  if not inventory then
+    return 0
+  end
+
+  local ok, limit = pcall(function()
+    return #inventory
+  end)
+  if ok and type(limit) == "number" then
+    return limit
+  end
+
+  return 0
+end
+
+local function find_last_readable_stack(inventory)
+  if not inventory then
+    return nil
+  end
+
+  local limit = inventory_slot_limit(inventory)
+  for index = limit, 1, -1 do
+    local stack = inventory[index]
+    if stack and stack.valid_for_read then
+      return stack
     end
-    copied[index] = entry_copy
-  end
-  return copied
-end
-
-local function normalize_split_for_payload(split)
-  return {
-    id = split.id,
-    name = split.name,
-    items = shallow_copy_entries(split.items),
-    blueprints = shallow_copy_entries(split.blueprints),
-    technologies = shallow_copy_entries(split.technologies),
-    notes = split.notes or ""
-  }
-end
-
-local function checksum_string(value)
-  local hash = 5381
-  for index = 1, #value do
-    hash = (hash * 33 + value:byte(index)) % 2147483647
-  end
-  return tostring(hash)
-end
-
-local function split_encoded_payload(encoded_payload)
-  local chunks = {}
-  for index = 1, #encoded_payload, CHUNK_SIZE do
-    chunks[#chunks + 1] = encoded_payload:sub(index, index + CHUNK_SIZE - 1)
   end
 
-  if #chunks == 0 then
-    chunks[1] = ""
-  end
-
-  return chunks
+  return nil
 end
 
-local function build_plan_payload(state)
-  local splits = {}
-  for index, split in ipairs(state.splits) do
-    splits[index] = normalize_split_for_payload(split)
+local function append_stack_to_inventory(inventory, item_name)
+  if not inventory or not inventory.insert then
+    return nil
   end
 
-  return {
-    format = PLAN_FORMAT,
-    schema_version = SCHEMA_VERSION,
-    plan_id = state.plan_id,
-    plan_name = state.plan_name or DEFAULT_PLAN_NAME,
-    splits = splits
-  }
+  if inventory.insert({name = item_name, count = 1}) ~= 1 then
+    return nil
+  end
+
+  return find_last_readable_stack(inventory)
 end
 
-local function build_book_metadata(state)
-  return {
-    format = PLAN_FORMAT,
-    schema_version = SCHEMA_VERSION,
-    plan_id = state.plan_id,
-    plan_name = state.plan_name or DEFAULT_PLAN_NAME
-  }
+local function non_empty_string(value)
+  if type(value) ~= "string" or value == "" then
+    return nil
+  end
+
+  return value
+end
+
+local function source_label(source)
+  local label = non_empty_string(safe_index(source, "label"))
+  if label then
+    return label
+  end
+
+  local export_record = safe_index(source, "export_record")
+  if type(export_record) ~= "function" then
+    return nil
+  end
+
+  local ok, export_string = pcall(export_record, source)
+  if not ok or type(export_string) ~= "string" or export_string == "" then
+    return nil
+  end
+
+  return blueprint_snapshot.resolve_name_from_export(export_string, nil)
+end
+
+local function source_blueprint_description(source)
+  local description = safe_index(source, "blueprint_description")
+  if type(description) ~= "string" then
+    return nil
+  end
+
+  return description
+end
+
+local function source_is_valid(source)
+  return safe_index(source, "valid_for_read") or safe_index(source, "valid")
+end
+
+local function source_type(source)
+  if safe_index(source, "is_blueprint_book") then
+    return "blueprint-book"
+  end
+
+  if safe_index(source, "is_blueprint") then
+    return "blueprint"
+  end
+
+  local record_type = safe_index(source, "type")
+  if type(record_type) == "string" then
+    return record_type
+  end
+
+  return nil
+end
+
+local function source_entries(source)
+  if not source or source_type(source) ~= "blueprint-book" then
+    return nil
+  end
+
+  local contents = safe_index(source, "contents")
+  if type(contents) == "table" then
+    local ordered = {}
+    for index, entry in pairs(contents) do
+      ordered[#ordered + 1] = {
+        index = index,
+        entry = entry
+      }
+    end
+    table.sort(ordered, function(a, b)
+      return a.index < b.index
+    end)
+    return ordered
+  end
+
+  local inventory = source.get_inventory and source.get_inventory(item_main_inventory_id()) or nil
+  if not inventory then
+    return nil
+  end
+
+  local ordered = {}
+  local limit = 0
+  local ok, length = pcall(function()
+    return #inventory
+  end)
+  if ok and type(length) == "number" then
+    limit = length
+  end
+
+  for index = 1, limit do
+    ordered[#ordered + 1] = {
+      index = index,
+      entry = inventory[index]
+    }
+  end
+
+  return ordered
+end
+
+local function resolve_import_source(player)
+  local cursor_stack = safe_index(player, "cursor_stack")
+  if cursor_stack and source_is_valid(cursor_stack) and source_type(cursor_stack) == "blueprint-book" then
+    return cursor_stack
+  end
+
+  local cursor_record = safe_index(player, "cursor_record")
+  if cursor_record and source_is_valid(cursor_record) and source_type(cursor_record) == "blueprint-book" then
+    return cursor_record
+  end
+
+  return nil
 end
 
 local function apply_active_plan(state, plan, source)
+  blueprint_snapshot.refresh_plan_blueprints(plan)
   state.splits = plan.splits or {}
   state.plan_source = source
   state.plan_id = plan.plan_id or state.plan_id
@@ -92,78 +203,188 @@ local function apply_active_plan(state, plan, source)
   end
 end
 
-local function find_chunk_record(record)
-  if not (record and record.valid_for_read and record.is_blueprint) then
+local function parse_description(description)
+  if type(description) ~= "string" or description == "" then
     return nil
+  end
+
+  return description_codec.import_from_description(description)
+end
+
+local function find_plan_metadata_from_item_stack(item_stack)
+  if not (item_stack and source_is_valid(item_stack) and source_type(item_stack) == "blueprint-book") then
+    return nil
+  end
+
+  local metadata = parse_description(source_blueprint_description(item_stack))
+  if not metadata or metadata.format ~= "long-pole-plan" then
+    return nil
+  end
+
+  metadata.plan_name = source_label(item_stack) or DEFAULT_PLAN_NAME
+  return metadata
+end
+
+local function extract_blueprint_snapshot(record, blueprint)
+  if not (record and record.is_blueprint and record.get_blueprint_entity_count) then
+    return blueprint
   end
 
   if record.get_blueprint_entity_count() < 1 then
-    return nil
+    return blueprint
   end
 
-  return record.get_blueprint_entity_tag(1, PLAN_CHUNK_TAG)
+  blueprint.export_string = record.export_stack and record.export_stack() or blueprint.export_string
+  blueprint.entity_count = record.get_blueprint_entity_count()
+  blueprint.entity_summary = blueprint_snapshot.summarize_entities(record.get_blueprint_entities() or {})
+  blueprint.fingerprint = blueprint.fingerprint or nil
+  return blueprint
+end
+
+local function configure_blueprint_link_carrier(stack)
+  if not (stack and stack.set_blueprint_entities) then
+    return true
+  end
+
+  stack.set_blueprint_entities({
+    {
+      entity_number = 1,
+      name = "constant-combinator",
+      position = {x = 0, y = 0}
+    }
+  })
+
+  return true
+end
+
+local function decode_blueprint_reference(record)
+  if not (record and source_is_valid(record) and source_type(record) == "blueprint") then
+    return nil, "Split book contains an entry that is not a blueprint."
+  end
+
+  local decoded = parse_description(source_blueprint_description(record))
+  if decoded and decoded.format ~= "long-pole-blueprint-link" then
+    return nil, "Split book contains a blueprint with an unexpected description format."
+  end
+
+  if not decoded and record.get_blueprint_entity_count and record.get_blueprint_entity_count() < 1 then
+    return nil, "Split book contains an empty blueprint without Long Pole link metadata."
+  end
+
+  local blueprint = decoded or {
+    name = source_label(record) or "Unnamed Blueprint"
+  }
+
+  blueprint.name = source_label(record) or blueprint.name or blueprint.blueprint_name or "Unnamed Blueprint"
+  blueprint.blueprint_name = blueprint.blueprint_name or blueprint.name
+
+  if decoded then
+    return blueprint, nil
+  end
+
+  return extract_blueprint_snapshot(record, blueprint), nil
+end
+
+local function decode_split_from_book_item(book_item, split_index)
+  if not (book_item and source_is_valid(book_item) and source_type(book_item) == "blueprint-book") then
+    return nil, "Plan book contains an entry that is not a split book."
+  end
+
+  local description = parse_description(source_blueprint_description(book_item))
+  if not description or description.format ~= "long-pole-split" then
+    return nil, "Split book is missing Long Pole split metadata."
+  end
+
+  local split = {
+    name = source_label(book_item) or ("Split %d"):format(split_index),
+    surface = description.surface or "nauvis",
+    items = description.items or {},
+    blueprints = {},
+    technologies = description.technologies or {},
+    notes = description.notes or ""
+  }
+
+  local entries = source_entries(book_item)
+  if not entries then
+    return nil, "Split book did not expose an internal inventory."
+  end
+
+  for _, slot in ipairs(entries) do
+    local entry = slot.entry
+    if entry and source_is_valid(entry) then
+      local blueprint, error_message = decode_blueprint_reference(entry)
+      if not blueprint then
+        return nil, error_message
+      end
+      split.blueprints[#split.blueprints + 1] = blueprint
+    end
+  end
+
+  return split
 end
 
 local function decode_plan_from_book_item(book_item)
-  if not (book_item and book_item.valid_for_read and book_item.is_blueprint_book) then
-    return nil, "No blueprint book found."
-  end
-
-  local inventory = book_item.get_inventory(defines.inventory.item_main)
-  if not inventory then
-    return nil, "Held blueprint book did not expose an internal inventory."
-  end
-
-  local chunks = {}
-  for index = 1, #inventory do
-    local chunk = find_chunk_record(inventory[index])
-    if chunk then
-      chunks[#chunks + 1] = chunk
-    end
-  end
-
-  if #chunks == 0 then
+  local metadata = find_plan_metadata_from_item_stack(book_item)
+  if not metadata then
     return nil, "Held blueprint book does not contain a Long Pole plan."
   end
 
-  table.sort(chunks, function(a, b)
-    return (a.chunk_index or 0) < (b.chunk_index or 0)
-  end)
+  local entries = source_entries(book_item)
+  if not entries then
+    return nil, "Held blueprint book did not expose an internal inventory."
+  end
 
-  local expected_chunk_count = chunks[1].chunk_count
-  local encoded_parts = {}
-  for index, chunk in ipairs(chunks) do
-    if chunk.format ~= PLAN_FORMAT then
-      return nil, "Held blueprint book is not a Long Pole plan."
+  local splits = {}
+  for _, slot in ipairs(entries) do
+    local entry = slot.entry
+    if entry and source_is_valid(entry) then
+      local split, error_message = decode_split_from_book_item(entry, #splits + 1)
+      if not split then
+        return nil, error_message
+      end
+      splits[#splits + 1] = split
     end
-
-    if chunk.schema_version ~= SCHEMA_VERSION then
-      return nil, "Plan schema version is not supported by this mod version."
-    end
-
-    if chunk.chunk_count ~= expected_chunk_count or chunk.chunk_index ~= index then
-      return nil, "Plan data chunks are incomplete or out of order."
-    end
-
-    encoded_parts[index] = chunk.payload or ""
   end
 
-  local encoded_payload = table.concat(encoded_parts)
-  if checksum_string(encoded_payload) ~= chunks[1].checksum then
-    return nil, "Plan checksum did not match; the blueprint book may be corrupted."
-  end
+  return {
+    plan_id = metadata.plan_id,
+    plan_name = metadata.plan_name,
+    splits = splits
+  }, nil
+end
 
-  local decoded_payload = helpers.decode_string(encoded_payload)
-  if not decoded_payload then
-    return nil, "Plan payload could not be decoded."
-  end
+local function build_plan_description(state)
+  return description_codec.export_to_description({
+    format = "long-pole-plan",
+    plan_id = state.plan_id,
+    visibility = "references-only",
+    default_surface = (state.splits[1] and state.splits[1].surface) or "nauvis"
+  })
+end
 
-  local plan = helpers.json_to_table(decoded_payload)
-  if not plan or plan.format ~= PLAN_FORMAT then
-    return nil, "Plan payload is invalid."
-  end
+local function build_split_description(split)
+  return description_codec.export_to_description({
+    format = "long-pole-split",
+    surface = split.surface or "nauvis",
+    items = split.items or {},
+    technologies = split.technologies or {},
+    notes = split.notes or ""
+  })
+end
 
-  return plan, nil
+local function build_blueprint_link_description(blueprint)
+  return description_codec.export_to_description({
+    format = "long-pole-blueprint-link",
+    link_mode = blueprint.link_mode or "reference",
+    library_root = blueprint.library_root or "player-blueprints",
+    inside_books = blueprint.inside_books,
+    source_book_label = blueprint.source_book_label,
+    blueprint_name = blueprint.name,
+    blueprint_slot = blueprint.blueprint_slot or blueprint.source_book_active_index,
+    source_book_active_index = blueprint.source_book_active_index,
+    entity_summary = blueprint.entity_summary,
+    fingerprint = blueprint.fingerprint
+  })
 end
 
 function M.create_empty_plan(state)
@@ -185,25 +406,16 @@ function M.has_active_plan(state)
 end
 
 function M.is_importable_plan_book(item_stack)
-  if not (item_stack and item_stack.valid_for_read and item_stack.is_blueprint_book) then
-    return false
+  return find_plan_metadata_from_item_stack(item_stack) ~= nil
+end
+
+function M.importable_plan_from_player(player)
+  local source = resolve_import_source(player)
+  if M.is_importable_plan_book(source) then
+    return source
   end
 
-  local inventory = item_stack.get_inventory(defines.inventory.item_main)
-  if not inventory then
-    return false
-  end
-
-  for index = 1, #inventory do
-    local stack = inventory[index]
-    if stack.valid_for_read and stack.is_blueprint and stack.get_blueprint_entity_count() >= 1 then
-      if stack.get_blueprint_entity_tag(1, PLAN_CHUNK_TAG) then
-        return true
-      end
-    end
-  end
-
-  return false
+  return nil
 end
 
 function M.decode_plan_from_item_stack(item_stack)
@@ -211,12 +423,12 @@ function M.decode_plan_from_item_stack(item_stack)
 end
 
 function M.import_plan_from_cursor(player, state)
-  local cursor_stack = player.cursor_stack
-  if not M.is_importable_plan_book(cursor_stack) then
+  local source = M.importable_plan_from_player(player)
+  if not source then
     return false, "Hold a Long Pole blueprint book in the cursor to import it."
   end
 
-  local plan, error_message = decode_plan_from_book_item(cursor_stack)
+  local plan, error_message = decode_plan_from_book_item(source)
   if not plan then
     return false, error_message
   end
@@ -230,12 +442,12 @@ function M.can_export_to_cursor(cursor_stack, state)
     return true
   end
 
-  local metadata = cursor_stack.get_tag(PLAN_BOOK_TAG)
+  local metadata = find_plan_metadata_from_item_stack(cursor_stack)
   if not metadata then
     return false
   end
 
-  return metadata.format == PLAN_FORMAT and metadata.plan_id == state.plan_id
+  return metadata.plan_id == state.plan_id
 end
 
 function M.export_plan_to_cursor(player, state)
@@ -256,51 +468,68 @@ function M.export_plan_to_cursor(player, state)
     return false, "Could not create a blueprint book in the cursor."
   end
 
-  cursor_stack.label = state.plan_name or DEFAULT_PLAN_NAME
-  cursor_stack.blueprint_description = "Portable Long Pole run plan"
-  cursor_stack.set_tag(PLAN_BOOK_TAG, build_book_metadata(state))
-
-  local payload_json = helpers.table_to_json(build_plan_payload(state))
-  local encoded_payload = helpers.encode_string(payload_json)
-  if not encoded_payload then
+  local plan_description, plan_error = build_plan_description(state)
+  if not plan_description then
     cursor_stack.clear()
-    return false, "Could not encode the plan payload."
+    return false, plan_error or "Could not encode the plan description."
   end
 
-  local chunks = split_encoded_payload(encoded_payload)
-  local checksum = checksum_string(encoded_payload)
-  local inventory = cursor_stack.get_inventory(defines.inventory.item_main)
+  cursor_stack.label = state.plan_name or DEFAULT_PLAN_NAME
+  cursor_stack.blueprint_description = plan_description
+
+  local inventory = cursor_stack.get_inventory(item_main_inventory_id())
   if not inventory then
     cursor_stack.clear()
     return false, "The exported blueprint book did not expose an internal inventory."
   end
 
-  for chunk_index, payload_chunk in ipairs(chunks) do
-    local stack = inventory[chunk_index]
-    if not stack.set_stack({name = "blueprint"}) then
+  for split_index, split in ipairs(state.splits or {}) do
+    local split_stack = append_stack_to_inventory(inventory, "blueprint-book")
+    if not split_stack then
       cursor_stack.clear()
-      return false, "Could not create a carrier blueprint in the exported book."
+      return false, "This plan has more splits than fit in one blueprint book."
+    end
+    if not split_stack.set_stack({name = "blueprint-book"}) then
+      cursor_stack.clear()
+      return false, "Could not create a split book in the exported plan."
     end
 
-    stack.label = ("Plan Chunk %d/%d"):format(chunk_index, #chunks)
-    stack.blueprint_description = "Long Pole plan carrier"
-    stack.set_blueprint_entities({
-      {
-        entity_number = 1,
-        name = "constant-combinator",
-        position = {x = 0, y = 0}
-      }
-    })
-    stack.set_blueprint_entity_tag(1, PLAN_CHUNK_TAG, {
-      format = PLAN_FORMAT,
-      schema_version = SCHEMA_VERSION,
-      plan_id = state.plan_id,
-      plan_name = state.plan_name or DEFAULT_PLAN_NAME,
-      chunk_index = chunk_index,
-      chunk_count = #chunks,
-      checksum = checksum,
-      payload = payload_chunk
-    })
+    local split_description, split_error = build_split_description(split)
+    if not split_description then
+      cursor_stack.clear()
+      return false, split_error or "Could not encode split metadata."
+    end
+
+    split_stack.label = split.name or ("Split %d"):format(split_index)
+    split_stack.blueprint_description = split_description
+
+    local split_inventory = split_stack.get_inventory(item_main_inventory_id())
+    if not split_inventory then
+      cursor_stack.clear()
+      return false, "An exported split book did not expose an internal inventory."
+    end
+
+    for _, blueprint in ipairs(split.blueprints or {}) do
+      local blueprint_stack = append_stack_to_inventory(split_inventory, "blueprint")
+      if not blueprint_stack then
+        cursor_stack.clear()
+        return false, ("Split '%s' has more linked blueprints than fit in one blueprint book."):format(split.name or ("Split %d"):format(split_index))
+      end
+      if not blueprint_stack.set_stack({name = "blueprint"}) then
+        cursor_stack.clear()
+        return false, "Could not create a linked blueprint entry in the exported split book."
+      end
+      configure_blueprint_link_carrier(blueprint_stack)
+
+      local link_description, link_error = build_blueprint_link_description(blueprint)
+      if not link_description then
+        cursor_stack.clear()
+        return false, link_error or "Could not encode linked blueprint metadata."
+      end
+
+      blueprint_stack.label = blueprint.name or "Unnamed Blueprint"
+      blueprint_stack.blueprint_description = link_description
+    end
   end
 
   cursor_stack.active_index = 1
@@ -308,6 +537,15 @@ function M.export_plan_to_cursor(player, state)
 end
 
 function M.entry_button_spec(player, state)
+  if M.importable_plan_from_player(player) then
+    return {
+      caption = "↓",
+      tooltip = "Import the held Long Pole plan book and replace the current plan.",
+      is_compact = true,
+      mode = "import"
+    }
+  end
+
   if M.has_active_plan(state) then
     return {
       caption = "✎",
@@ -317,19 +555,10 @@ function M.entry_button_spec(player, state)
     }
   end
 
-  if M.is_importable_plan_book(player.cursor_stack) then
-    return {
-      caption = "Import Plan",
-      tooltip = "Import the held Long Pole plan book.",
-      is_compact = false,
-      mode = "import"
-    }
-  end
-
   return {
-    caption = "New Plan",
+    caption = "✎",
     tooltip = "Create a new empty plan and open the editor.",
-    is_compact = false,
+    is_compact = true,
     mode = "new"
   }
 end

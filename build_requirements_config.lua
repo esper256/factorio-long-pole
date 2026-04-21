@@ -16,7 +16,7 @@ local function merge_set(base, extra)
   return merged
 end
 
-M.raw_resources_by_planet = {
+M.raw_resources_by_surface = {
   nauvis = {
     ["item:wood"] = true,
     ["item:coal"] = true,
@@ -48,7 +48,7 @@ M.raw_resources_by_planet = {
   }
 }
 
-M.hidden_raw_resources_by_planet = {
+M.hidden_raw_resources_by_surface = {
   nauvis = {
     ["fluid:water"] = true
   },
@@ -66,9 +66,9 @@ M.hidden_raw_resources_by_planet = {
   }
 }
 
--- Raw-cost expansion uses an explicit recipe-category allowlist per planet.
--- If a category is not listed for a planet here, it is not considered valid on
--- that planet. This prevents optional Space Age categories such as crushing or
+-- Raw-cost expansion uses an explicit recipe-category allowlist per surface.
+-- If a category is not listed for a surface here, it is not considered valid on
+-- that surface. This prevents optional Space Age categories such as crushing or
 -- recycling from leaking into unrelated production paths just because they
 -- happen to exist in the prototype set.
 local COMMON_FACTORY_CATEGORIES = {
@@ -90,7 +90,7 @@ local COMMON_FACTORY_CATEGORIES = {
   ["rocket-building"] = true
 }
 
-M.allowed_recipe_categories_by_planet = {
+M.allowed_recipe_categories_by_surface = {
   nauvis = copy_set(COMMON_FACTORY_CATEGORIES),
   vulcanus = merge_set(COMMON_FACTORY_CATEGORIES, {
     metallurgy = true

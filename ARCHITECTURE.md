@@ -205,11 +205,11 @@ Speedrunners need to be able to design a plan in one save, then start a fresh ru
 - Plans must survive across saves without requiring external files.
 - Each save should have exactly one active working plan in `storage`.
 - Importing a plan into a fresh save should be explicit and cursor-driven.
-- Large plans must not depend on long visible text fields that clutter the UI or make blueprint tooltips expensive to render.
 - The storage format should be versioned so that future mod releases can migrate old plans.
 - The in-save working copy of the plan should remain in `storage`; the portable copy is an explicit export artifact.
+- The export format should be understandable enough that advanced users can manually inspect and occasionally edit it by hand.
 
-### Recommended design: single active plan plus portable plan book
+### Recommended design: single active plan plus nested portable plan books
 
 The mod should keep one editable plan in save-local `storage` and treat blueprint books as portable import/export artifacts.
 
@@ -220,61 +220,119 @@ The upper-left action button is the only entry point:
 
 The exported blueprint book should contain:
 
-- A short user-visible label such as `Any% Practice Plan` or `Space Age Route v3`.
-- One or more blueprint entries used as **plan data carriers**.
-- Optional human-readable blueprint descriptions kept intentionally short.
+- The plan name in the top-level blueprint book label.
+- Global plan metadata in the top-level blueprint book description.
+- One child blueprint book per split.
 
 The editor is not a multi-plan browser. It always edits the single active plan currently loaded in the save.
 
-Each carrier blueprint should store the actual plan payload in **blueprint entity tags**, not in the blueprint description. This avoids rendering a giant wall of serialized text in normal UI surfaces while still piggybacking on blueprint import/export and library persistence.
+### Top-level plan book format
 
-### Why blueprint entity tags
+The top-level blueprint book is the exported run plan.
 
-Factorio does not provide a good generic hidden metadata field on blueprint items themselves. `label` and `blueprint_description` are visible to the player and are poor fits for large opaque payloads. By contrast, blueprint entity tags are designed for structured mod data attached to blueprint entities and are not intended as a user-facing text surface.
+Top-level book rules:
 
-The export format should therefore use:
+- The label is the plan name.
+- The order of child split books is the authoritative split order.
+- The description is a small ASCII key/value document.
 
-- A dedicated carrier blueprint.
-- A single anchor entity inside that blueprint.
-- A namespaced tag on that entity such as `long-pole.plan_chunk`.
+Current shape:
 
-The anchor entity exists only to give the blueprint somewhere to hold hidden tags. The player does not need to place the blueprint in the world for import/export to work.
+```text
+format=long-pole-plan;version=1
+plan_id=plan-42
+visibility=references-only
+default_surface=nauvis
+```
 
-### Payload format
+This top-level description intentionally stays small and human-readable. It is not used to store the ordered split contents themselves; those live in the nested split books.
 
-The payload stored in the carrier blueprint should be:
+### Split book format
 
-1. A normalized Lua table representation of the run plan.
-2. Serialized to JSON.
-3. Compressed with `helpers.encode_string()`.
-4. Split into chunks when necessary.
+Each split is exported as its own child blueprint book inside the plan book.
 
-Each chunk should include lightweight metadata:
+Split book rules:
 
-- `format = "long-pole-plan"`
-- `schema_version = 1`
-- `plan_id`
-- `chunk_index`
-- `chunk_count`
-- `payload`
-- `checksum` or lightweight integrity hash
+- The split book label is the split name.
+- The order of child blueprint entries inside the split book is the authoritative linked-blueprint order.
+- The split book description stores the split-local human-editable metadata.
 
-The full logical plan should include:
+Current shape:
 
-- Plan-level metadata: plan name, author label if present, exported-at version, Factorio major/minor compatibility target.
-- Ordered split list.
-- For each split: name, blueprint references/import strings as needed, extra items, technologies, notes, and any staged-blueprint accounting rules.
+```text
+format=long-pole-split;version=1
+surface=nauvis
 
-### Handling large plans
+--- Extra Items ---
+transport-belt=200
+iron-chest=3
 
-Blueprint metadata can grow large enough to become awkward if all data is forced into one visible field or one monolithic blob. To keep the system resilient:
+--- Technologies to Research ---
+automation
+logistics
 
-- Do not store the plan in `blueprint_description` except for a short summary.
-- Allow the plan book to contain multiple carrier blueprints, each holding one chunk.
-- Keep each chunk independently decodable and indexed.
-- Keep the first carrier blueprint small and obvious so it can serve as the user-facing "entry point" for import.
+--- Notes ---
+Feed gears before circuits.
+```
 
-This chunked-book design gives the mod room to support very large plans without betting everything on the practical size limits of one blueprint entry.
+Section rules:
+
+- `surface` is preferred over `planet` because Space Age work can happen on non-planet surfaces such as space platforms.
+- `--- Extra Items ---` contains `prototype-name=count` lines.
+- `--- Technologies to Research ---` contains one technology name per line.
+- `--- Notes ---` is always present at the end and may contain freeform lines.
+- Repeated keys inside a section are not required for human-edited lists; the section structure is the primary grouping mechanism.
+
+### Linked blueprint entry format
+
+Each split book contains one child blueprint entry per linked blueprint.
+
+The default export mode is a lightweight **reference-style** export:
+
+- The child entry is still a blueprint item so the split book remains easy to reorder by hand in Factorio's UI.
+- The child blueprint description stores the link metadata and planning fingerprint.
+- The child blueprint does not need to contain the full original blueprint payload in the default export mode.
+
+Current shape:
+
+```text
+format=long-pole-blueprint-link;version=1
+link_mode=reference
+library_root=player-blueprints
+inside_book=Any% Openers
+inside_book=Burner Starts
+inside_book=Safe Variants
+blueprint_name=Starter burner pair
+blueprint_slot=2
+fingerprint=burner-mining-drill:2;stone-furnace:2
+```
+
+Notes on path encoding:
+
+- Do not flatten nested book paths into one separator-delimited string.
+- Use repeated `inside_book=` lines in order from outermost to innermost book.
+- If the blueprint lives directly in the blueprint library root, omit `inside_book=` lines entirely.
+
+This avoids separator-escaping problems when blueprint book names contain characters such as `/`.
+
+### Reference exports versus copied exports
+
+The storage model should explicitly distinguish between:
+
+- **Reference export**: split books contain lightweight blueprint link entries with planning fingerprints.
+- **Copied export**: split books contain full copied blueprints so the plan is self-contained and shareable with players who do not have the same blueprint library.
+
+The current default format is reference export. A future option may enable copied exports without changing the surrounding book-of-books structure.
+
+### Why description text is acceptable here
+
+This design intentionally uses visible blueprint book and blueprint descriptions because:
+
+- the descriptions remain fairly small and structured
+- advanced users can read and manually edit them when the in-game UI is awkward
+- the top-level order and nested-book structure carry much of the plan shape, so the textual payload per object stays modest
+
+Opaque JSON blobs and multi-chunk carrier blueprints are therefore not the preferred long-term format for this design.
 
 ### Import workflow
 
@@ -282,16 +340,18 @@ The import workflow should be:
 
 1. Player holds a Long Pole plan book in the cursor.
 2. Player clicks the upper-left `Import Plan` action.
-3. The mod scans that held blueprint book for `long-pole` carrier tags.
-4. The mod reassembles chunks, validates schema version/checksum, and decodes the JSON.
-5. The decoded plan replaces the save's working plan in `storage`.
+3. The mod validates the top-level plan book description.
+4. The mod reads child split books in inventory order.
+5. The mod reads each split book description plus its child blueprint-link entries.
+6. The decoded plan replaces the save's working plan in `storage`.
 
 The export workflow should be the inverse:
 
 1. Player clicks `Save to New Book` in the editor.
 2. The mod creates a portable plan blueprint book in the cursor.
-3. The plan is serialized, compressed, chunked, and written into carrier blueprint entity tags.
-4. Saving is allowed when the cursor is empty, or when the cursor is already holding the active plan's previously exported Long Pole book.
+3. The mod writes the plan description to the top-level book and creates one split book per split.
+4. The mod writes split descriptions and linked blueprint entry descriptions into the nested books.
+5. Saving is allowed when the cursor is empty, or when the cursor is already holding the active plan's previously exported Long Pole book.
 
 ### Save-local data versus portable data
 
@@ -309,8 +369,6 @@ The architecture should support fallback import/export methods later, but they s
 - Export/import via blueprint string text.
 - Export/import via `script-output` JSON for advanced users.
 - Migration of old schema versions on import.
-
-If blueprint-carried metadata ever proves too small in practice, the next fallback should still be blueprint-book based: multiple chunks across multiple carrier blueprints before considering visible text fields.
 
 ## Engineering approach
 

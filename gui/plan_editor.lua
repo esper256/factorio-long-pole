@@ -1,3 +1,5 @@
+local blueprint_snapshot = require("blueprint_snapshot")
+local blueprint_library = require("blueprint_library")
 local build_requirements = require("build_requirements")
 local item_quantity_dialog = require("gui.item_quantity_dialog")
 local plan_storage = require("plan_storage")
@@ -11,6 +13,10 @@ local BLUEPRINT_PANEL_WIDTH = 320
 local EXTRA_ITEMS_PANEL_WIDTH = 280
 local TOTAL_PANEL_MIN_WIDTH = 420
 local RESEARCH_COLUMN_WIDTH = 220
+local TITLE_FIELD_MIN_WIDTH = 320
+local TITLE_FIELD_MAX_WIDTH = 520
+local HEADER_TO_FIELDS_GAP = 10
+local COLUMN_SPACING = 6
 local BUILD_GRID_COLUMNS = 12
 local BUILD_GRID_SLOT_SIZE = 40
 local EXTRA_ITEM_GRID_COLUMNS = 4
@@ -22,15 +28,21 @@ local PANEL_HEADER_HEIGHT = 32
 local GRID_VERTICAL_SPACING = 4
 local GRID_CHROME_HEIGHT = 18
 local PLANET_BUTTON_SIZE = 30
+local COMPACT_ICON_BUTTON_SIZE = 28
+local RESEARCH_ADD_BUTTON_WIDTH = 28
+local BUILD_COLUMN_WIDTH = BLUEPRINT_PANEL_WIDTH + COLUMN_SPACING + EXTRA_ITEMS_PANEL_WIDTH
+local MIN_SPLIT_ROW_WIDTH = CONTROL_COLUMN_WIDTH + HEADER_TO_FIELDS_GAP + BUILD_COLUMN_WIDTH + COLUMN_SPACING + RESEARCH_COLUMN_WIDTH + COLUMN_SPACING + TOTAL_PANEL_MIN_WIDTH
 
 M.root_name = "long_pole_plan_editor"
 M.close_button_name = "long_pole_close_plan_editor"
 M.add_split_button_name = "long_pole_add_split"
 M.save_plan_button_name = "long_pole_save_plan"
+M.plan_name_field_name = "long_pole_plan_name"
 M.split_list_name = "long_pole_split_list"
 M.move_split_up_name = "long_pole_move_split_up"
 M.move_split_down_name = "long_pole_move_split_down"
-M.cycle_split_planet_name = "long_pole_cycle_split_planet"
+M.delete_split_button_name = "long_pole_delete_split"
+M.cycle_split_surface_name = "long_pole_cycle_split_surface"
 M.add_blueprint_button_name = "long_pole_add_blueprint"
 M.replace_blueprint_button_name = "long_pole_replace_blueprint"
 M.remove_blueprint_button_name = "long_pole_remove_blueprint"
@@ -73,7 +85,7 @@ local function ensure_editor_state(state)
   state.editor_research_picker_options = state.editor_research_picker_options or {}
 end
 
-local function available_planets()
+local function available_surfaces()
   if rawget(_G, "script") and script.active_mods and script.active_mods["space-age"] then
     return {"nauvis", "vulcanus", "fulgora", "gleba", "aquilo"}
   end
@@ -81,36 +93,36 @@ local function available_planets()
   return {"nauvis"}
 end
 
-local function normalize_split_planet(split)
-  local planets = available_planets()
-  for _, planet_name in ipairs(planets) do
-    if split.planet == planet_name then
-      return planet_name
+local function normalize_split_surface(split)
+  local surfaces = available_surfaces()
+  for _, surface_name in ipairs(surfaces) do
+    if split.surface == surface_name then
+      return surface_name
     end
   end
 
-  return planets[1]
+  return surfaces[1]
 end
 
-local function next_planet_name(current_planet)
-  local planets = available_planets()
+local function next_surface_name(current_surface)
+  local surfaces = available_surfaces()
   local current_index = 1
-  for index, planet_name in ipairs(planets) do
-    if planet_name == current_planet then
+  for index, surface_name in ipairs(surfaces) do
+    if surface_name == current_surface then
       current_index = index
       break
     end
   end
 
-  return planets[(current_index % #planets) + 1]
+  return surfaces[(current_index % #surfaces) + 1]
 end
 
-local function planet_sprite_path(planet_name)
-  return "space-location/" .. planet_name
+local function surface_sprite_path(surface_name)
+  return "space-location/" .. surface_name
 end
 
-local function format_planet_caption(planet_name)
-  return (planet_name:gsub("^%l", string.upper))
+local function format_surface_caption(surface_name)
+  return (surface_name:gsub("^%l", string.upper))
 end
 
 local function raw_cost_error_entry(error_message)
@@ -168,6 +180,49 @@ local function clear_raw_cost_error(player, state, split)
   end
 
   player_errors[split.id] = nil
+end
+
+local function style_compact_button(button, width, height)
+  button.style.width = width
+  button.style.height = height or width
+  button.style.left_padding = 0
+  button.style.right_padding = 0
+  button.style.top_padding = 0
+  button.style.bottom_padding = 0
+end
+
+local function add_header_gap(parent, width)
+  local gap = parent.add({
+    type = "empty-widget"
+  })
+  gap.style.width = width
+  gap.style.height = 1
+  return gap
+end
+
+local function add_header_label(parent, caption, width, stretch)
+  local label = parent.add({
+    type = "label",
+    caption = caption
+  })
+  label.style = "semibold_label"
+  if stretch then
+    label.style.horizontally_stretchable = true
+    label.style.minimal_width = width
+  else
+    label.style.minimal_width = width
+    label.style.maximal_width = width
+  end
+  return label
+end
+
+local function effective_plan_name(name)
+  local trimmed = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if trimmed == "" then
+    return "Untitled Plan"
+  end
+
+  return trimmed
 end
 
 local function build_extra_item_entries(split)
@@ -248,35 +303,6 @@ local function ensure_window(player)
   frame.style.height = height
 
   return frame
-end
-
-local function summarize_blueprint_entities(entities)
-  local summary_by_name = {}
-
-  for _, entity in ipairs(entities or {}) do
-    local entity_name = entity.name
-    if entity_name and entity_name ~= "" then
-      summary_by_name[entity_name] = (summary_by_name[entity_name] or 0) + 1
-    end
-  end
-
-  local summary = {}
-  for entity_name, count in pairs(summary_by_name) do
-    summary[#summary + 1] = {
-      name = entity_name,
-      count = count
-    }
-  end
-
-  table.sort(summary, function(a, b)
-    if a.count == b.count then
-      return a.name < b.name
-    end
-
-    return a.count > b.count
-  end)
-
-  return summary
 end
 
 local function technology_display_name(prototype, technology_name)
@@ -371,28 +397,6 @@ local function build_research_entries(split, technology_prototypes)
   return entries
 end
 
-local function resolve_blueprint_name_from_export(export_string, fallback_name)
-  if not (game and game.create_inventory and export_string and export_string ~= "") then
-    return fallback_name
-  end
-
-  local inventory = game.create_inventory(1)
-  if not inventory then
-    return fallback_name
-  end
-
-  local name = fallback_name
-  local stack = inventory[1]
-  if stack and stack.valid and stack.import_stack(export_string) <= 0 then
-    if stack.label and stack.label ~= "" then
-      name = stack.label
-    end
-  end
-
-  inventory.destroy()
-  return name
-end
-
 local function get_held_blueprint(player)
   local cursor_record = player.cursor_record
   if cursor_record and cursor_record.valid then
@@ -415,13 +419,16 @@ local function get_held_blueprint(player)
       end
 
       local export_string = record.export_record()
-      local blueprint_name = resolve_blueprint_name_from_export(export_string, "Unnamed Blueprint")
       local entities = record.get_blueprint_entities() or {}
+      local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
       return {
-        name = blueprint_name,
+        name = blueprint_snapshot.resolve_name_from_export(export_string, "Unnamed Blueprint"),
         export_string = export_string,
         entity_count = record.get_blueprint_entity_count(),
-        entity_summary = summarize_blueprint_entities(entities),
+        entity_summary = blueprint_snapshot.summarize_entities(entities),
+        library_root = library_match and library_match.library_root or "player-blueprints",
+        inside_books = library_match and library_match.inside_books or nil,
+        blueprint_slot = library_match and library_match.blueprint_slot or source_book_active_index,
         source_book_label = source_book_label,
         source_book_active_index = source_book_active_index
       }, nil
@@ -461,11 +468,16 @@ local function get_held_blueprint(player)
         end
 
         local entities = stack.get_blueprint_entities() or {}
+        local export_string = stack.export_stack()
+        local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
         return {
           name = blueprint_name,
-          export_string = stack.export_stack(),
+          export_string = export_string,
           entity_count = stack.get_blueprint_entity_count(),
-          entity_summary = summarize_blueprint_entities(entities),
+          entity_summary = blueprint_snapshot.summarize_entities(entities),
+          library_root = library_match and library_match.library_root or "player-blueprints",
+          inside_books = library_match and library_match.inside_books or nil,
+          blueprint_slot = library_match and library_match.blueprint_slot or source_book_active_index,
           source_book_label = source_book_label,
           source_book_active_index = source_book_active_index
         }, nil
@@ -798,8 +810,7 @@ local function add_research_panel(parent, state, split)
     caption = "+",
     tags = {split_id = split.id}
   })
-  add_button.style.width = 48
-  add_button.style.height = PANEL_HEADER_HEIGHT
+  style_compact_button(add_button, RESEARCH_ADD_BUTTON_WIDTH, PANEL_HEADER_HEIGHT)
   add_button.enabled = #technology_names > 0
   add_button.tooltip = "Add the selected technology to this split."
 
@@ -833,42 +844,18 @@ local function add_shared_column_headers(parent, row_width)
   })
   header_row.style.horizontally_stretchable = true
   header_row.style.top_margin = 6
+  header_row.style.horizontal_spacing = 0
   if row_width then
     header_row.style.width = row_width
   end
 
-  local split_header = header_row.add({
-    type = "label",
-    caption = "Split"
-  })
-  split_header.style = "semibold_label"
-  split_header.style.minimal_width = CONTROL_COLUMN_WIDTH
-  split_header.style.maximal_width = CONTROL_COLUMN_WIDTH
-
-  local build_header = header_row.add({
-    type = "label",
-    caption = "Build"
-  })
-  build_header.style = "semibold_label"
-  build_header.style.horizontally_stretchable = true
-  build_header.style.left_margin = 10
-
-  local research_header = header_row.add({
-    type = "label",
-    caption = "Research"
-  })
-  research_header.style = "semibold_label"
-  research_header.style.minimal_width = RESEARCH_COLUMN_WIDTH
-  research_header.style.maximal_width = RESEARCH_COLUMN_WIDTH
-  research_header.style.left_margin = 6
-
-  local total_header = header_row.add({
-    type = "label",
-    caption = "Total"
-  })
-  total_header.style = "semibold_label"
-  total_header.style.horizontally_stretchable = true
-  total_header.style.left_margin = 6
+  add_header_label(header_row, "Split", CONTROL_COLUMN_WIDTH, false)
+  add_header_gap(header_row, HEADER_TO_FIELDS_GAP)
+  add_header_label(header_row, "Build", BUILD_COLUMN_WIDTH, false)
+  add_header_gap(header_row, COLUMN_SPACING)
+  add_header_label(header_row, "Research", RESEARCH_COLUMN_WIDTH, false)
+  add_header_gap(header_row, COLUMN_SPACING)
+  add_header_label(header_row, "Total", TOTAL_PANEL_MIN_WIDTH, true)
 end
 
 local function add_split_row(parent, state, split_index, split, total_splits, row_width)
@@ -922,51 +909,69 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
   name_field.style.minimal_width = 120
   name_field.style.maximal_width = 120
 
-  local move_buttons = controls.add({
+  local action_row = controls.add({
     type = "flow",
     direction = "horizontal"
   })
-  move_buttons.style.top_margin = 6
-  move_buttons.style.horizontal_spacing = 6
+  action_row.style.top_margin = 6
+  action_row.style.horizontal_spacing = 6
 
-  local up_button = move_buttons.add({
+  local up_button = action_row.add({
     type = "button",
     name = M.move_split_up_name,
     caption = "▲",
     tags = {split_id = split.id}
   })
-  up_button.style.width = 36
+  style_compact_button(up_button, COMPACT_ICON_BUTTON_SIZE)
   up_button.enabled = split_index > 1
 
-  local down_button = move_buttons.add({
+  local down_button = action_row.add({
     type = "button",
     name = M.move_split_down_name,
     caption = "▼",
     tags = {split_id = split.id}
   })
-  down_button.style.width = 36
+  style_compact_button(down_button, COMPACT_ICON_BUTTON_SIZE)
   down_button.enabled = split_index < total_splits
 
-  split.planet = normalize_split_planet(split)
-  local planet_button = move_buttons.add({
+  local delete_button = action_row.add({
     type = "sprite-button",
-    name = M.cycle_split_planet_name,
-    sprite = planet_sprite_path(split.planet),
+    name = M.delete_split_button_name,
+    sprite = "utility/trash",
     tags = {split_id = split.id}
   })
-  planet_button.style = "tool_button"
-  planet_button.style.width = PLANET_BUTTON_SIZE
-  planet_button.style.height = PLANET_BUTTON_SIZE
-  planet_button.tooltip = {"", "Planet: ", format_planet_caption(split.planet)}
-  planet_button.enabled = #available_planets() > 1
+  delete_button.style = "red_slot_button"
+  delete_button.style.width = COMPACT_ICON_BUTTON_SIZE
+  delete_button.style.height = COMPACT_ICON_BUTTON_SIZE
+  delete_button.tooltip = "Delete this split."
 
-  local notes_button = move_buttons.add({
+  local detail_row = controls.add({
+    type = "flow",
+    direction = "horizontal"
+  })
+  detail_row.style.top_margin = 6
+  detail_row.style.horizontal_spacing = 6
+
+  split.surface = normalize_split_surface(split)
+  local surface_button = detail_row.add({
+    type = "sprite-button",
+    name = M.cycle_split_surface_name,
+    sprite = surface_sprite_path(split.surface),
+    tags = {split_id = split.id}
+  })
+  surface_button.style = "tool_button"
+  surface_button.style.width = PLANET_BUTTON_SIZE
+  surface_button.style.height = PLANET_BUTTON_SIZE
+  surface_button.tooltip = {"", "Surface: ", format_surface_caption(split.surface)}
+  surface_button.enabled = #available_surfaces() > 1
+
+  local notes_button = detail_row.add({
     type = "button",
     name = M.toggle_notes_button_name,
     caption = "N",
     tags = {split_id = split.id}
   })
-  notes_button.style.width = 30
+  style_compact_button(notes_button, COMPACT_ICON_BUTTON_SIZE)
   notes_button.tooltip = split.notes ~= "" and "Show or hide notes for this split." or "Add notes for this split."
 
   local fields = row.add({
@@ -975,8 +980,8 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
   })
   fields.style.horizontally_stretchable = true
   fields.style.vertically_stretchable = true
-  fields.style.horizontal_spacing = 6
-  fields.style.left_margin = 10
+  fields.style.horizontal_spacing = COLUMN_SPACING
+  fields.style.left_margin = HEADER_TO_FIELDS_GAP
 
   add_blueprint_sources(fields, split)
   add_extra_items_panel(fields, split)
@@ -1018,6 +1023,7 @@ function M.refresh(player, state)
   ensure_editor_state(state)
   destroy_children(frame)
   state.editor_research_picker_options[player.index] = {}
+  local window_width = compute_window_dimensions(player)
 
   local titlebar = frame.add({
     type = "flow",
@@ -1025,20 +1031,39 @@ function M.refresh(player, state)
   })
   titlebar.drag_target = frame
   titlebar.style.horizontally_stretchable = true
+  titlebar.style.vertical_align = "center"
+  titlebar.style.horizontal_spacing = 8
 
-  local title = titlebar.add({
-    type = "label",
-    caption = "Speedrun Plan Editor"
+  local plan_name_field = titlebar.add({
+    type = "textfield",
+    name = M.plan_name_field_name,
+    text = effective_plan_name(state.plan_name)
   })
-  title.style = "frame_title"
-  title.ignored_by_interaction = true
+  plan_name_field.style.minimal_width = TITLE_FIELD_MIN_WIDTH
+  plan_name_field.style.maximal_width = TITLE_FIELD_MAX_WIDTH
+  plan_name_field.style.width = math.min(TITLE_FIELD_MAX_WIDTH, math.max(TITLE_FIELD_MIN_WIDTH, window_width - 520))
+  plan_name_field.style.height = 28
+  plan_name_field.style.left_margin = 8
+  plan_name_field.tags = {plan_name = true}
+  plan_name_field.tooltip = "Edit the plan name."
 
-  local spacer = titlebar.add({
-    type = "empty-widget"
-  })
+  local spacer = titlebar.add({ type = "empty-widget" })
   spacer.style.horizontally_stretchable = true
   spacer.style.height = 24
+  spacer.drag_target = frame
   spacer.ignored_by_interaction = true
+
+  local add_split_button = titlebar.add({
+    type = "button",
+    name = M.add_split_button_name,
+    caption = "Add Split"
+  })
+
+  local save_plan_button = titlebar.add({
+    type = "button",
+    name = M.save_plan_button_name,
+    caption = "Save to New Book"
+  })
 
   titlebar.add({
     type = "sprite-button",
@@ -1055,41 +1080,9 @@ function M.refresh(player, state)
   })
   content.style.horizontally_stretchable = true
   content.style.vertically_stretchable = true
-  content.style.top_margin = 8
+  content.style.top_margin = 6
 
-  local toolbar = content.add({
-    type = "flow",
-    direction = "horizontal"
-  })
-  toolbar.style.horizontally_stretchable = true
-
-  local toolbar_title = toolbar.add({
-    type = "label",
-    caption = state.plan_name or "Untitled Plan"
-  })
-  toolbar_title.style = "semibold_label"
-
-  local toolbar_spacer = toolbar.add({
-    type = "empty-widget"
-  })
-  toolbar_spacer.style.horizontally_stretchable = true
-
-  local add_split_button = toolbar.add({
-    type = "button",
-    name = M.add_split_button_name,
-    caption = "Add Split"
-  })
-  add_split_button.style.left_margin = 8
-
-  local save_plan_button = toolbar.add({
-    type = "button",
-    name = M.save_plan_button_name,
-    caption = "Save to New Book"
-  })
-  save_plan_button.style.left_margin = 8
-
-  local window_width = compute_window_dimensions(player)
-  local split_row_width = math.max(980, window_width - 72)
+  local split_row_width = math.max(MIN_SPLIT_ROW_WIDTH, window_width - 72)
   add_shared_column_headers(content, split_row_width)
 
   local split_list = content.add({
@@ -1142,6 +1135,7 @@ function M.handle_click(player, state, element, event)
   end
 
   if element.name == M.save_plan_button_name then
+    state.plan_name = effective_plan_name(state.plan_name)
     local ok, error_message = plan_storage.export_plan_to_cursor(player, state)
     if not ok then
       player.print(error_message)
@@ -1175,6 +1169,19 @@ function M.handle_click(player, state, element, event)
     return tracker.remove_split_blueprint_by_id(state, element.tags.split_id, element.tags.blueprint_index)
   end
 
+  if element.name == M.delete_split_button_name then
+    ensure_editor_state(state)
+    local split_id = element.tags.split_id
+    state.editor_notes_expanded[split_id] = nil
+
+    local player_errors = state.editor_raw_cost_errors[player.index]
+    if player_errors then
+      player_errors[split_id] = nil
+    end
+
+    return tracker.remove_split_by_id(state, split_id)
+  end
+
   if element.name == M.toggle_notes_button_name then
     ensure_editor_state(state)
     local split_id = element.tags.split_id
@@ -1182,13 +1189,13 @@ function M.handle_click(player, state, element, event)
     return true
   end
 
-  if element.name == M.cycle_split_planet_name then
+  if element.name == M.cycle_split_surface_name then
     local split = tracker.get_split_by_id(state, element.tags.split_id)
     if not split then
       return false
     end
 
-    return tracker.set_split_planet_by_id(state, element.tags.split_id, next_planet_name(normalize_split_planet(split)))
+    return tracker.set_split_surface_by_id(state, element.tags.split_id, next_surface_name(normalize_split_surface(split)))
   end
 
   if slot_grid.matches_action(element, M.extra_item_cell_button_name) then
@@ -1242,6 +1249,11 @@ end
 
 function M.handle_text_changed(_player, state, element)
   if item_quantity_dialog.handle_text_changed(_player, state, element) then
+    return false
+  end
+
+  if element.name == M.plan_name_field_name then
+    state.plan_name = element.text
     return false
   end
 

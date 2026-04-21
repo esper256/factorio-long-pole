@@ -1,13 +1,10 @@
 local M = {}
 local config = require("build_requirements_config")
 
-local RAW_RESOURCES_BY_PLANET = config.raw_resources_by_planet or {}
-local HIDDEN_RAW_RESOURCES_BY_PLANET = config.hidden_raw_resources_by_planet or {}
-local ALLOWED_RECIPE_CATEGORIES_BY_PLANET = config.allowed_recipe_categories_by_planet or {}
+local RAW_RESOURCES_BY_SURFACE = config.raw_resources_by_surface or {}
+local HIDDEN_RAW_RESOURCES_BY_SURFACE = config.hidden_raw_resources_by_surface or {}
+local ALLOWED_RECIPE_CATEGORIES_BY_SURFACE = config.allowed_recipe_categories_by_surface or {}
 local IGNORED_REQUIREMENT_KEYS = config.ignored_requirement_keys or {}
-local DEBUG_RECIPE_TRACE_KEYS = {
-  ["item:transport-belt"] = true
-}
 
 local function try_index(root, key)
   if root == nil then
@@ -77,22 +74,6 @@ local function format_requirement_key(kind, name)
   return ("%s:%s"):format(kind or "unknown", name or "unknown")
 end
 
-local function should_debug_requirement(kind, name)
-  return DEBUG_RECIPE_TRACE_KEYS[format_requirement_key(kind, name)] == true
-end
-
-local function debug_log_requirement(kind, name, message)
-  if not should_debug_requirement(kind, name) then
-    return
-  end
-
-  if type(log) ~= "function" then
-    return
-  end
-
-  log(("[long-pole][raw-cost][%s] %s"):format(format_requirement_key(kind, name), message))
-end
-
 local function get_recipe_prototypes()
   local runtime_recipe_prototypes = try_index(prototypes, "recipe")
   if runtime_recipe_prototypes then
@@ -111,24 +92,24 @@ local function get_technology_prototypes()
   return try_index(game, "technology_prototypes") or {}
 end
 
-local function get_surface_properties_for_planet(planet_name)
-  local planets = try_index(game, "planets")
-  local runtime_planet = planets and try_index(planets, planet_name)
-  local runtime_planet_prototype = runtime_planet and try_index(runtime_planet, "prototype")
-  local runtime_planet_properties = runtime_planet_prototype and try_index(runtime_planet_prototype, "surface_properties")
-  if runtime_planet_properties then
-    return runtime_planet_properties
+local function get_surface_properties_for_surface(surface_name)
+  local space_age_surfaces = try_index(game, "planets")
+  local runtime_surface_location = space_age_surfaces and try_index(space_age_surfaces, surface_name)
+  local runtime_surface_location_prototype = runtime_surface_location and try_index(runtime_surface_location, "prototype")
+  local runtime_surface_location_properties = runtime_surface_location_prototype and try_index(runtime_surface_location_prototype, "surface_properties")
+  if runtime_surface_location_properties then
+    return runtime_surface_location_properties
   end
 
   local runtime_surface_prototypes = try_index(prototypes, "surface")
-  local runtime_surface_prototype = runtime_surface_prototypes and try_index(runtime_surface_prototypes, planet_name)
+  local runtime_surface_prototype = runtime_surface_prototypes and try_index(runtime_surface_prototypes, surface_name)
   local runtime_surface_properties = runtime_surface_prototype and try_index(runtime_surface_prototype, "surface_properties")
   if runtime_surface_properties then
     return runtime_surface_properties
   end
 
   local runtime_space_locations = try_index(prototypes, "space_location")
-  local runtime_space_location = runtime_space_locations and try_index(runtime_space_locations, planet_name)
+  local runtime_space_location = runtime_space_locations and try_index(runtime_space_locations, surface_name)
   local runtime_space_location_properties = runtime_space_location and try_index(runtime_space_location, "surface_properties")
   if runtime_space_location_properties then
     return runtime_space_location_properties
@@ -137,13 +118,13 @@ local function get_surface_properties_for_planet(planet_name)
   return {}
 end
 
-local function recipe_matches_surface_conditions(recipe, planet_name)
+local function recipe_matches_surface_conditions(recipe, surface_name)
   local surface_conditions = try_index(recipe, "surface_conditions") or {}
   if #surface_conditions == 0 then
     return true
   end
 
-  local surface_properties = get_surface_properties_for_planet(planet_name)
+  local surface_properties = get_surface_properties_for_surface(surface_name)
   for _, condition in ipairs(surface_conditions) do
     local property_name = condition.property
     local property_value = surface_properties[property_name]
@@ -163,12 +144,14 @@ local function recipe_matches_surface_conditions(recipe, planet_name)
   return true
 end
 
-local function recipe_category_allowed_on_planet(recipe, planet_name)
-  local allowed_categories = ALLOWED_RECIPE_CATEGORIES_BY_PLANET[planet_name] or {}
+local function recipe_category_allowed_on_surface(recipe, surface_name)
+  local allowed_categories = ALLOWED_RECIPE_CATEGORIES_BY_SURFACE[surface_name] or {}
   local categories = {}
   local primary_category = try_index(recipe, "category") or "crafting"
   categories[#categories + 1] = primary_category
 
+  -- Some 2.0/Space Age recipes expose alternate valid machine categories here,
+  -- so the resolver needs to accept any allowed category, not just the primary.
   for _, category_name in ipairs(try_index(recipe, "additional_categories") or {}) do
     categories[#categories + 1] = category_name
   end
@@ -180,16 +163,6 @@ local function recipe_category_allowed_on_planet(recipe, planet_name)
   end
 
   return false
-end
-
-local function recipe_category_debug_string(recipe)
-  local primary_category = try_index(recipe, "category") or "crafting"
-  local additional_categories = try_index(recipe, "additional_categories") or {}
-  if #additional_categories == 0 then
-    return primary_category
-  end
-
-  return ("%s (+ %s)"):format(primary_category, table.concat(additional_categories, ", "))
 end
 
 local function product_amount_for_target(recipe, kind, name)
@@ -225,13 +198,13 @@ local function is_ignored_requirement(kind, name)
   return IGNORED_REQUIREMENT_KEYS[kind .. ":" .. name] == true
 end
 
-local function is_raw_resource(kind, name, planet_name)
-  local planet_resources = RAW_RESOURCES_BY_PLANET[planet_name] or RAW_RESOURCES_BY_PLANET.nauvis or {}
-  return planet_resources[kind .. ":" .. name] == true
+local function is_raw_resource(kind, name, surface_name)
+  local surface_resources = RAW_RESOURCES_BY_SURFACE[surface_name] or RAW_RESOURCES_BY_SURFACE.nauvis or {}
+  return surface_resources[kind .. ":" .. name] == true
 end
 
-local function is_hidden_raw_resource(kind, name, planet_name)
-  local hidden_resources = HIDDEN_RAW_RESOURCES_BY_PLANET[planet_name] or {}
+local function is_hidden_raw_resource(kind, name, surface_name)
+  local hidden_resources = HIDDEN_RAW_RESOURCES_BY_SURFACE[surface_name] or {}
   return hidden_resources[kind .. ":" .. name] == true
 end
 
@@ -251,10 +224,9 @@ local function score_totals(totals)
   return score
 end
 
-local function resolve_raw_cost_entry(kind, name, planet_name, resolve_recipe_set, cache, active_stack)
-  local entry_key = planet_name .. ":" .. kind .. ":" .. name
+local function resolve_raw_cost_entry(kind, name, surface_name, resolve_recipe_set, cache, active_stack)
+  local entry_key = surface_name .. ":" .. kind .. ":" .. name
   if cache[entry_key] then
-    debug_log_requirement(kind, name, ("cache hit on %s"):format(planet_name))
     return cache[entry_key], nil
   end
 
@@ -267,29 +239,23 @@ local function resolve_raw_cost_entry(kind, name, planet_name, resolve_recipe_se
   if active_stack[entry_key] then
     return nil, ("Detected a recipe cycle while resolving %s on %s."):format(
       format_requirement_key(kind, name),
-      planet_name
+      surface_name
     )
   end
 
-  if is_raw_resource(kind, name, planet_name) then
+  if is_raw_resource(kind, name, surface_name) then
     local raw_totals = {}
     add_total(raw_totals, kind, name, 1)
     cache[entry_key] = raw_totals
-    debug_log_requirement(kind, name, ("treated as raw resource on %s"):format(planet_name))
     return raw_totals, nil
   end
 
   active_stack[entry_key] = true
-  local matching_recipes = resolve_recipe_set(kind, name, planet_name) or {}
-  debug_log_requirement(kind, name, ("candidate recipes on %s: %d"):format(planet_name, #matching_recipes))
+  local matching_recipes = resolve_recipe_set(kind, name, surface_name) or {}
   local best_totals = nil
   local best_score = nil
 
   for _, recipe in ipairs(matching_recipes) do
-    debug_log_requirement(kind, name, ("trying recipe %s with categories %s"):format(
-      try_index(recipe, "name") or "<unnamed>",
-      recipe_category_debug_string(recipe)
-    ))
     local product_amount = product_amount_for_target(recipe, kind, name)
     if product_amount and product_amount > 0 then
       local candidate_totals = {}
@@ -297,7 +263,7 @@ local function resolve_raw_cost_entry(kind, name, planet_name, resolve_recipe_se
         local ingredient_totals, error_message = resolve_raw_cost_entry(
           ingredient_kind(ingredient),
           ingredient.name,
-          planet_name,
+          surface_name,
           resolve_recipe_set,
           cache,
           active_stack
@@ -310,16 +276,9 @@ local function resolve_raw_cost_entry(kind, name, planet_name, resolve_recipe_se
       end
 
       local candidate_score = score_totals(candidate_totals)
-      debug_log_requirement(kind, name, ("recipe %s produced candidate score %s"):format(
-        try_index(recipe, "name") or "<unnamed>",
-        tostring(candidate_score)
-      ))
       if best_score == nil or candidate_score < best_score then
         best_totals = candidate_totals
         best_score = candidate_score
-        debug_log_requirement(kind, name, ("recipe %s is new best candidate"):format(
-          try_index(recipe, "name") or "<unnamed>"
-        ))
       end
     end
   end
@@ -327,10 +286,9 @@ local function resolve_raw_cost_entry(kind, name, planet_name, resolve_recipe_se
   active_stack[entry_key] = nil
 
   if not best_totals then
-    debug_log_requirement(kind, name, ("no valid production path found on %s"):format(planet_name))
     return nil, ("Could not resolve a valid production path for %s on %s."):format(
       format_requirement_key(kind, name),
-      planet_name
+      surface_name
     )
   end
 
@@ -457,26 +415,14 @@ function M.summarize_split(split, options_or_resolver)
   return totals_to_summary(totals)
 end
 
-function M.find_recipes_for_result(kind, name, planet_name, recipe_prototypes)
+function M.find_recipes_for_result(kind, name, surface_name, recipe_prototypes)
   local matches = {}
   for _, recipe in pairs(recipe_prototypes or get_recipe_prototypes()) do
     local products = try_index(recipe, "products") or {}
     for _, product in ipairs(products) do
       if (product.type or "item") == kind and product.name == name then
-        local resolved_planet_name = planet_name or "nauvis"
-        local category_allowed = recipe_category_allowed_on_planet(recipe, resolved_planet_name)
-        local surface_allowed = recipe_matches_surface_conditions(recipe, resolved_planet_name)
-
-        if should_debug_requirement(kind, name) then
-          debug_log_requirement(kind, name, ("recipe %s categories=%s allowed=%s surface_ok=%s"):format(
-            try_index(recipe, "name") or "<unnamed>",
-            recipe_category_debug_string(recipe),
-            tostring(category_allowed),
-            tostring(surface_allowed)
-          ))
-        end
-
-        if category_allowed and surface_allowed then
+        if recipe_category_allowed_on_surface(recipe, surface_name or "nauvis")
+          and recipe_matches_surface_conditions(recipe, surface_name or "nauvis") then
           matches[#matches + 1] = recipe
         end
         break
@@ -490,7 +436,7 @@ end
 function M.summarize_raw_cost(split, options)
   options = options or {}
 
-  local planet_name = split.planet or options.planet_name or "nauvis"
+  local surface_name = split.surface or options.surface_name or "nauvis"
   local combined_totals = {}
   for _, entry in ipairs(M.summarize_split(split, {
     resolve_entity_components = options.resolve_entity_components,
@@ -501,8 +447,8 @@ function M.summarize_raw_cost(split, options)
   end
 
   local recipe_prototypes = options.recipe_prototypes or get_recipe_prototypes()
-  local resolve_recipe_set = options.resolve_recipe_set or function(kind, name, resolved_planet_name)
-    return M.find_recipes_for_result(kind, name, resolved_planet_name, recipe_prototypes)
+  local resolve_recipe_set = options.resolve_recipe_set or function(kind, name, resolved_surface_name)
+    return M.find_recipes_for_result(kind, name, resolved_surface_name, recipe_prototypes)
   end
 
   local raw_totals = {}
@@ -511,7 +457,7 @@ function M.summarize_raw_cost(split, options)
     local ingredient_totals, error_message = resolve_raw_cost_entry(
       entry.kind,
       entry.name,
-      planet_name,
+      surface_name,
       resolve_recipe_set,
       cache,
       {}
@@ -524,7 +470,7 @@ function M.summarize_raw_cost(split, options)
 
   local filtered_totals = {}
   for _, entry in pairs(raw_totals) do
-    if not is_hidden_raw_resource(entry.kind, entry.name, planet_name) then
+    if not is_hidden_raw_resource(entry.kind, entry.name, surface_name) then
       add_total(filtered_totals, entry.kind, entry.name, entry.count)
     end
   end
