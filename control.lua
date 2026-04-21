@@ -80,12 +80,12 @@ script.on_event(defines.events.on_gui_click, function(event)
     return
   end
 
-  if split_viewer.handle_click(player, storage, element) then
+  if split_viewer.handle_click(player, storage, element, event) then
     refresh_player(player)
     return
   end
 
-  local plan_editor_result = plan_editor.handle_click(player, storage, element)
+  local plan_editor_result = plan_editor.handle_click(player, storage, element, event)
   if plan_editor_result == "refresh-split-viewer" then
     split_viewer.refresh(player, storage)
     return
@@ -130,6 +130,41 @@ script.on_event(defines.events.on_gui_elem_changed, function(event)
   if plan_editor.handle_elem_changed(player, storage, element) then
     split_viewer.refresh(player, storage)
     plan_editor.refresh(player, storage)
+  end
+end)
+
+script.on_event(defines.events.on_gui_value_changed, function(event)
+  local element = event.element
+  if not (element and element.valid) then
+    return
+  end
+
+  local player = game.get_player(event.player_index)
+  if not player then
+    return
+  end
+
+  plan_editor.handle_value_changed(player, storage, element)
+end)
+
+script.on_event(defines.events.on_gui_confirmed, function(event)
+  local element = event.element
+  if not (element and element.valid) then
+    return
+  end
+
+  local player = game.get_player(event.player_index)
+  if not player then
+    return
+  end
+
+  local plan_editor_result = plan_editor.handle_confirmed(player, storage, element)
+  if plan_editor_result == "handled" then
+    return
+  end
+
+  if plan_editor_result then
+    refresh_player(player)
   end
 end)
 

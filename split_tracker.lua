@@ -23,12 +23,44 @@ local function copy_entries(entries)
   return copied
 end
 
+local function normalize_item_entry(item)
+  local entry = copy_entries({item or {count = 1}})[1]
+  entry.count = math.max(1, math.floor(tonumber(entry.count) or 1))
+  if entry.name == "" then
+    entry.name = nil
+  end
+  return entry
+end
+
+local function normalize_technology_entry(technology)
+  local entry = copy_entries({technology or {}})[1]
+  local name = (entry.name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  entry.name = name ~= "" and name or nil
+  return entry
+end
+
+local function normalize_technology_entries(technologies)
+  local normalized = {}
+  local seen = {}
+
+  for _, technology in ipairs(technologies or {}) do
+    local entry = normalize_technology_entry(technology)
+    if entry.name and not seen[entry.name] then
+      seen[entry.name] = true
+      normalized[#normalized + 1] = entry
+    end
+  end
+
+  return normalized
+end
+
 local function normalize_split(split, fallback_name)
   split.name = split.name or fallback_name or "Untitled Split"
   split.items = copy_entries(split.items)
   split.blueprints = copy_entries(split.blueprints)
   split.technologies = copy_entries(split.technologies)
   split.notes = split.notes or ""
+  split.planet = split.planet or "nauvis"
   return split
 end
 
@@ -235,7 +267,22 @@ function M.add_split_item_by_id(state, split_id, item)
     return false
   end
 
-  split.items[#split.items + 1] = copy_entries({item or {count = 1}})[1]
+  split.items[#split.items + 1] = normalize_item_entry(item)
+  return true
+end
+
+function M.replace_split_item_by_id(state, split_id, item_index, item)
+  local split = M.get_split_by_id(state, split_id)
+  if not split or not split.items[item_index] then
+    return false
+  end
+
+  if not item or not item.name or item.name == "" then
+    table.remove(split.items, item_index)
+    return true
+  end
+
+  split.items[item_index] = normalize_item_entry(item)
   return true
 end
 
@@ -251,7 +298,7 @@ function M.set_split_item_name_by_id(state, split_id, item_index, item_name)
   end
 
   split.items[item_index].name = item_name
-  split.items[item_index].count = split.items[item_index].count or 1
+  split.items[item_index].count = math.max(1, math.floor(tonumber(split.items[item_index].count) or 1))
   return true
 end
 
@@ -281,7 +328,7 @@ function M.set_split_technologies(state, split_index, technologies)
     return false
   end
 
-  split.technologies = copy_entries(technologies)
+  split.technologies = normalize_technology_entries(technologies)
   return true
 end
 
@@ -292,6 +339,56 @@ function M.set_split_technologies_by_id(state, split_id, technologies)
   end
 
   return M.set_split_technologies(state, split_index, technologies)
+end
+
+function M.add_split_technology_by_id(state, split_id, technology)
+  local split = M.get_split_by_id(state, split_id)
+  if not split then
+    return false
+  end
+
+  local entry = normalize_technology_entry(technology)
+  if not entry.name then
+    return false
+  end
+
+  for _, existing in ipairs(split.technologies) do
+    if existing.name == entry.name then
+      return false
+    end
+  end
+
+  split.technologies[#split.technologies + 1] = entry
+  return true
+end
+
+function M.remove_split_technology_by_id(state, split_id, technology_index)
+  local split = M.get_split_by_id(state, split_id)
+  if not split or not split.technologies[technology_index] then
+    return false
+  end
+
+  table.remove(split.technologies, technology_index)
+  return true
+end
+
+function M.set_split_planet(state, split_index, planet_name)
+  local split = state.splits[split_index]
+  if not split or not planet_name or planet_name == "" then
+    return false
+  end
+
+  split.planet = planet_name
+  return true
+end
+
+function M.set_split_planet_by_id(state, split_id, planet_name)
+  local split_index = M.find_split_index_by_id(state, split_id)
+  if not split_index then
+    return false
+  end
+
+  return M.set_split_planet(state, split_index, planet_name)
 end
 
 function M.move_split(state, from_index, to_index)

@@ -148,6 +148,15 @@ describe("split_tracker", function()
     assert.are.equal(2, tracker.find_split_index_by_id(state, first_id))
   end)
 
+  it("stores a planet per split", function()
+    local state = initialized_state_with_plan()
+    local split_id = state.splits[1].id
+
+    assert.are.equal("nauvis", state.splits[1].planet)
+    assert.is_true(tracker.set_split_planet_by_id(state, split_id, "gleba"))
+    assert.are.equal("gleba", state.splits[1].planet)
+  end)
+
   it("supports blueprint linking and item picker style updates", function()
     local state = initialized_state_with_plan()
     local split_id = state.splits[1].id
@@ -182,10 +191,48 @@ describe("split_tracker", function()
     assert.are.equal("transport-belt", state.splits[1].items[1].name)
     assert.are.equal(200, state.splits[1].items[1].count)
 
+    assert.is_true(tracker.replace_split_item_by_id(state, split_id, 1, {
+      name = "iron-chest",
+      count = 3.8
+    }))
+    assert.are.equal("iron-chest", state.splits[1].items[1].name)
+    assert.are.equal(3, state.splits[1].items[1].count)
+
     assert.is_true(tracker.remove_split_blueprint_by_id(state, split_id, 1))
     assert.are.equal(0, #state.splits[1].blueprints)
 
     assert.is_true(tracker.remove_split_item_by_id(state, split_id, 1))
+    assert.are.equal(0, #state.splits[1].items)
+  end)
+
+  it("supports adding and removing unique technologies by id", function()
+    local state = initialized_state_with_plan()
+    local split_id = state.splits[1].id
+
+    assert.is_true(tracker.add_split_technology_by_id(state, split_id, {
+      name = "automation"
+    }))
+    assert.is_false(tracker.add_split_technology_by_id(state, split_id, {
+      name = "automation"
+    }))
+    assert.are.equal("automation", state.splits[1].technologies[1].name)
+
+    assert.is_true(tracker.remove_split_technology_by_id(state, split_id, 1))
+    assert.are.equal(0, #state.splits[1].technologies)
+  end)
+
+  it("removes an item when a replacement omits the name", function()
+    local state = initialized_state_with_plan()
+    local split_id = state.splits[1].id
+
+    assert.is_true(tracker.add_split_item_by_id(state, split_id, {
+      name = "transport-belt",
+      count = 5
+    }))
+    assert.is_true(tracker.replace_split_item_by_id(state, split_id, 1, {
+      count = 10
+    }))
+
     assert.are.equal(0, #state.splits[1].items)
   end)
 end)

@@ -4,6 +4,7 @@
         "settings",
         "script",
         "storage",
+        "helpers",
         "prototypes",
         "entity",
         "defines",

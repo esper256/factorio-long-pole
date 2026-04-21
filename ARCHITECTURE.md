@@ -12,7 +12,7 @@ The general use case is:
    - Craft another burner mining drill and furnace and place them.
    - Mine 500+ coal from coal rocks.
    - Build a blueprint containing a boiler, steam engine, lab, and 10 red science packs.
-2. Run the plan in-game.
+2. Start a new game and load the plan.
 3. Use the mod to identify which part of the current split is predicted to take the longest (the “long pole”).
 
 Example: if the mod indicates **gear wheel assembly** is the long pole, the player should prioritize feeding iron plates into gear wheel assemblers before feeding electronic circuit assemblers.
@@ -58,6 +58,8 @@ Each split should have the following columns:
 
 A large popup window (nearly full screen) for editing the list of splits.
 
+The plan editor must be treated as a **dense information workspace**, not a spacious form UI. Speedrunners need to see many splits and many requirements at once, so packing efficiency is a default design goal rather than a later cleanup task.
+
 Each split includes:
 
 - a name
@@ -69,6 +71,18 @@ The editor also surfaces supporting information to help with planning decisions,
 
 - the raw resource cost of every entity combined in each blueprint
 - the total entity count of each blueprint
+
+### Plan editor layout principles
+
+The editor should follow a few explicit layout rules:
+
+- Prefer compact controls over roomy controls.
+- Prefer putting secondary actions inside the relevant scrolling content area rather than reserving permanent empty header space for them.
+- Prefer dense, glanceable summaries over tall, form-like rows.
+- Width and height should be biased toward the highest-value planning surfaces, especially blueprints and research.
+- Items, notes, and low-frequency actions should compete for space only after the blueprint and split-planning surfaces are readable.
+
+In practice this means the default response to "we need another control" should not be "give it a dedicated spacious region". The default response should be "how do we integrate it into the existing dense layout without stealing attention from the primary planning data?"
 
 Undecided: Many blueprints are staged in that they include items from the previous blueprint in addition to the new entities. There needs to be some way to not double count the old entitities that were already build in a previous blueprint.
 
