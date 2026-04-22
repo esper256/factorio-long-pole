@@ -1,5 +1,9 @@
 local M = {}
 
+-- Dense planner panels reuse this helper to render item-like slots with stable
+-- tags. Keeping it generic avoids each screen reimplementing its own slot math
+-- and click naming scheme.
+
 local function build_button_name(base_name, index)
   return ("%s_%d"):format(base_name, index)
 end
@@ -79,6 +83,8 @@ function M.add(parent, entries, options)
     visible_entry_count = 1
   end
 
+  -- Fixed minimum slot counts keep panel heights and click targets stable while
+  -- the editor is being refreshed in place.
   for index = 1, visible_entry_count do
     local entry = entries[index]
     local button_spec = {
@@ -134,6 +140,8 @@ function M.matches_action(element, action_name)
     return true
   end
 
+  -- Support both explicit tags and legacy/generated element names so callers can
+  -- migrate incrementally without breaking existing click handling.
   return element.name == action_name or element.name:match("^" .. action_name .. "_%d+$") ~= nil
 end
 

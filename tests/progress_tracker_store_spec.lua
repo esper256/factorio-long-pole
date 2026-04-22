@@ -22,9 +22,26 @@ describe("progress_tracker_store", function()
     assert.is_true(progress_tracker_store.adjust_loose_stock(state, "enemy", "gleba", "transport-belt", 2))
     assert.is_true(progress_tracker_store.adjust_loose_stock(state, "player", "nauvis", "transport-belt", -999))
 
-    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "transport-belt"))
+    assert.are.equal(-991, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "transport-belt"))
     assert.are.equal(3, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-chest"))
     assert.are.equal(2, progress_tracker_store.get_loose_stock(state, "enemy", "gleba", "transport-belt"))
+  end)
+
+  it("only clamps negative loose stock during the explicit reconciliation pass", function()
+    local state = {}
+    progress_tracker_store.init(state)
+
+    assert.is_true(progress_tracker_store.adjust_loose_stock(state, "player", "nauvis", "transport-belt", -5))
+    assert.is_true(progress_tracker_store.adjust_loose_stock(state, "player", "nauvis", "transport-belt", 3))
+    assert.are.equal(-2, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "transport-belt"))
+
+    assert.is_true(progress_tracker_store.adjust_loose_stock(state, "player", "nauvis", "transport-belt", 4))
+    assert.are.equal(2, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "transport-belt"))
+
+    assert.is_true(progress_tracker_store.adjust_loose_stock(state, "player", "nauvis", "iron-chest", -7))
+    assert.is_true(progress_tracker_store.clamp_all_loose_stock_to_non_negative(state))
+    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-chest"))
+    assert.is_false(progress_tracker_store.clamp_all_loose_stock_to_non_negative(state))
   end)
 
   it("tracks placed entities separately from loose stock and aggregates by item icon key", function()

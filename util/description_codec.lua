@@ -1,4 +1,10 @@
+local blueprint_fingerprint = require("util.blueprint_fingerprint")
+
 local M = {}
+
+-- Long Pole stores plan data inside blueprint descriptions on purpose: the
+-- payload needs to round-trip through ordinary blueprint books, survive across
+-- saves, and stay inspectable enough that humans can debug bad metadata by eye.
 
 M.example_plan_description = [[format=long-pole-plan;version=1
 plan_id=plan-42
@@ -29,7 +35,7 @@ inside_book=Burner Starts
 inside_book=Safe Variants
 blueprint_name=Starter burner pair
 blueprint_slot=2
-fingerprint=burner-mining-drill:2;stone-furnace:2
+blueprint_fingerprint=burner-mining-drill:2;stone-furnace:2
 ]]
 
 M.example_blueprint_link_root_description = [[format=long-pole-blueprint-link;version=1
@@ -37,12 +43,14 @@ link_mode=reference
 library_root=player-blueprints
 blueprint_name=Direct Library Blueprint
 blueprint_slot=7
-fingerprint=transport-belt:12;inserter:4
+blueprint_fingerprint=transport-belt:12;inserter:4
 ]]
 
 local SECTION_HEADER_PATTERN = "^%-%-%- (.+) %-%-%-$"
 
 local function split_lines(value)
+  -- Blueprint descriptions can pick up mixed line endings from copy/paste or
+  -- manual edits, so normalize them before parsing sections.
   local normalized = (value or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
   local lines = {}
   if normalized == "" then
@@ -136,39 +144,6 @@ local function normalize_technologies(technologies)
   return normalized
 end
 
-local function fingerprint_from_entity_summary(entity_summary)
-  local parts = {}
-  for _, entry in ipairs(entity_summary or {}) do
-    if entry.name and entry.name ~= "" then
-      parts[#parts + 1] = ("%s:%d"):format(entry.name, math.max(1, math.floor(tonumber(entry.count) or 1)))
-    end
-  end
-  return table.concat(parts, ";")
-end
-
-local function entity_summary_from_fingerprint(fingerprint)
-  local summary = {}
-  local total = 0
-  if not fingerprint or fingerprint == "" then
-    return summary, total
-  end
-
-  for entry_text in fingerprint:gmatch("[^;]+") do
-    local name, count_text = split_first(entry_text, ":")
-    name = trim(name)
-    local count = math.floor(tonumber(count_text) or 0)
-    if name ~= "" and count > 0 then
-      summary[#summary + 1] = {
-        name = name,
-        count = count
-      }
-      total = total + count
-    end
-  end
-
-  return summary, total
-end
-
 local function export_plan_description(data)
   local lines = {
     serialize_header("long-pole-plan", 1)
@@ -216,6 +191,8 @@ local function export_blueprint_link_description(data)
   }
 
   local inside_books = data.inside_books or {}
+  -- Preserve at least the immediate source book name when a full nested path is
+  -- unavailable so refresh still has one human-meaningful breadcrumb.
   if #inside_books == 0 and data.source_book_label and data.source_book_label ~= "" then
     inside_books = {data.source_book_label}
   end
@@ -227,11 +204,11 @@ local function export_blueprint_link_description(data)
   append_key_value(lines, "blueprint_name", data.blueprint_name or data.name)
   append_key_value(lines, "blueprint_slot", data.blueprint_slot or data.source_book_active_index)
 
-  local fingerprint = data.fingerprint
-  if not fingerprint or fingerprint == "" then
-    fingerprint = fingerprint_from_entity_summary(data.entity_summary)
+  local stored_blueprint_fingerprint = data.blueprint_fingerprint
+  if not stored_blueprint_fingerprint or stored_blueprint_fingerprint == "" then
+    stored_blueprint_fingerprint = blueprint_fingerprint.from_entity_summary(data.entity_summary)
   end
-  append_key_value(lines, "fingerprint", fingerprint)
+  append_key_value(lines, "blueprint_fingerprint", stored_blueprint_fingerprint)
 
   return table.concat(lines, "\n") .. "\n"
 end
@@ -257,6 +234,8 @@ local function parse_root_lines(lines, start_index)
       end
 
       if repeated[key] then
+        -- Nested blueprint-book paths are stored as repeated keys so the
+        -- serialized format stays easy to inspect and append to manually.
         root[key] = root[key] or {}
         root[key][#root[key] + 1] = value
       else
@@ -373,7 +352,8 @@ local function import_blueprint_link_description(lines, header)
     return nil, error_message
   end
 
-  local entity_summary, entity_count = entity_summary_from_fingerprint(root.fingerprint)
+  local stored_blueprint_fingerprint = root.blueprint_fingerprint or root.fingerprint or ""
+  local entity_summary, entity_count = blueprint_fingerprint.entity_summary_from_blueprint_fingerprint(stored_blueprint_fingerprint)
   local inside_books = root.inside_book or {}
   local first_inside_book = inside_books[1]
   local blueprint_slot = tonumber(root.blueprint_slot)
@@ -389,7 +369,7 @@ local function import_blueprint_link_description(lines, header)
     inside_books = inside_books,
     blueprint_name = root.blueprint_name,
     blueprint_slot = blueprint_slot,
-    fingerprint = root.fingerprint or "",
+    blueprint_fingerprint = stored_blueprint_fingerprint,
     name = root.blueprint_name,
     source_book_label = first_inside_book,
     source_book_active_index = blueprint_slot,

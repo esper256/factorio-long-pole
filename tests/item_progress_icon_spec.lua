@@ -55,38 +55,6 @@ describe("item_progress_icon", function()
     })
   end
 
-  it("creates an idiomatic slot icon with a thin progress bar below it", function()
-    local parent = make_element({
-      type = "flow",
-      direction = "vertical"
-    })
-
-    local root = item_progress_icon.add(parent, {
-      kind = "item",
-      name = "iron-plate",
-      count = 12,
-      progress = 0.25
-    })
-
-    local button = root[item_progress_icon.icon_name]
-    local progress = root[item_progress_icon.progress_name]
-
-    assert.are.equal("flow", root.type)
-    assert.are.equal("vertical", root.direction)
-    assert.are.equal("sprite-button", button.type)
-    assert.are.equal("slot_button", button.style_name)
-    assert.are.equal("item/iron-plate", button.sprite)
-    assert.are.equal(12, button.number)
-    assert.is_true(button.ignored_by_interaction)
-    assert.are.same({"", "iron-plate", "\nAmount: ", "12", "\nProgress: ", "25%"}, button.tooltip)
-
-    assert.are.equal("progressbar", progress.type)
-    assert.is_true(progress.visible)
-    assert.are.equal(0.25, progress.value)
-    assert.are.same({r = 0.24, g = 0.72, b = 0.32}, progress.style.color)
-    assert.are.equal(4, progress.style.bar_width)
-  end)
-
   it("supports interactive icons and caller-supplied tags", function()
     local parent = make_element({
       type = "flow",

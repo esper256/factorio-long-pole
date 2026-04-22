@@ -6,6 +6,10 @@ local ALLOWED_RECIPE_CATEGORIES_BY_SURFACE = config.allowed_recipe_categories_by
 local RECIPE_RESULT_INDEX_CACHE = setmetatable({}, {__mode = "k"})
 local RECIPE_SURFACE_MATCH_CACHE = setmetatable({}, {__mode = "k"})
 
+-- Recipe lookups sit on the hot path for missing-requirement planning, so this
+-- module indexes results once per prototype set and then layers surface-aware
+-- filtering on top.
+
 local function try_index(root, key)
   if root == nil then
     return nil
@@ -31,6 +35,8 @@ function M.get_recipe_prototypes()
 end
 
 function M.get_surface_properties(surface_name)
+  -- Space Age exposes surface data through a few related prototype/runtime
+  -- shapes. Probe them in order so tests and runtime both work with one helper.
   local space_age_surfaces = try_index(game, "planets")
   local runtime_surface_location = space_age_surfaces and try_index(space_age_surfaces, surface_name)
   local runtime_surface_location_prototype = runtime_surface_location and try_index(runtime_surface_location, "prototype")
@@ -158,6 +164,8 @@ local function get_recipe_result_index(recipe_prototypes)
     return cached_index, resolved_recipe_prototypes
   end
 
+  -- Indexing once matters because requirement planning repeatedly asks "what
+  -- can make X?" for every missing intermediate in the tree.
   local built_index = build_recipe_result_index(resolved_recipe_prototypes)
   RECIPE_RESULT_INDEX_CACHE[resolved_recipe_prototypes] = built_index
   RECIPE_SURFACE_MATCH_CACHE[resolved_recipe_prototypes] = {}
@@ -176,6 +184,8 @@ function M.find_recipes_for_result(kind, name, surface_name, recipe_prototypes)
     return cached_matches
   end
 
+  -- Surface filtering is cached separately from the raw result index because the
+  -- same recipe set can be queried for multiple planets in one planning session.
   local matches = {}
   for _, recipe in ipairs(recipe_index[result_key] or {}) do
     if M.recipe_category_allowed_on_surface(recipe, resolved_surface_name)
@@ -189,6 +199,7 @@ function M.find_recipes_for_result(kind, name, surface_name, recipe_prototypes)
 end
 
 function M.clear_caches()
+  -- Exposed for tests and future prototype-reload hooks.
   for recipe_prototypes in pairs(RECIPE_RESULT_INDEX_CACHE) do
     RECIPE_RESULT_INDEX_CACHE[recipe_prototypes] = nil
   end

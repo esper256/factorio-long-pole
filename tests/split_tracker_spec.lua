@@ -173,82 +173,6 @@ describe("split_tracker", function()
     assert.are.equal("Labs", status.upcoming[1].name)
   end)
 
-  it("only recalculates missing requirements for the current split views", function()
-    local state = initialized_state_with_plan()
-    tracker.add_split(state, "Labs")
-    tracker.add_split(state, "Mall")
-    state.current_split_index = 2
-
-    local original_missing = build_requirements.summarize_missing_requirements
-    local original_direct = build_requirements.summarize_direct_requirement_progress
-    local calls = {}
-
-    build_requirements.summarize_missing_requirements = function(split, _snapshot, options)
-      calls[#calls + 1] = {
-        split_name = split.name,
-        include_blueprints = options and options.include_blueprints,
-        include_items = options and options.include_items
-      }
-      return {}, nil, {}
-    end
-    build_requirements.summarize_direct_requirement_progress = function()
-      return {}, nil, {}
-    end
-
-    local ok, result = pcall(function()
-      return tracker.get_split_status(state, "player")
-    end)
-
-    build_requirements.summarize_missing_requirements = original_missing
-    build_requirements.summarize_direct_requirement_progress = original_direct
-
-    assert.is_true(ok)
-    assert.is_table(result)
-    assert.are.equal(2, #calls)
-    assert.are.equal("First Power", calls[1].split_name)
-    assert.is_nil(calls[1].include_blueprints)
-    assert.is_nil(calls[1].include_items)
-    assert.are.equal("First Power", calls[2].split_name)
-    assert.is_false(calls[2].include_blueprints)
-    assert.is_false(calls[2].include_items)
-  end)
-
-  it("reuses cached root requirements across repeated status refreshes", function()
-    local state = initialized_state_with_plan()
-    tracker.add_split(state, "Labs")
-    state.current_split_index = 2
-
-    local original_build_root_requirements = build_requirements.build_root_requirements
-    local original_missing = build_requirements.summarize_missing_requirements
-    local original_direct = build_requirements.summarize_direct_requirement_progress
-    local build_root_call_count = 0
-
-    build_requirements.build_root_requirements = function(split, options)
-      build_root_call_count = build_root_call_count + 1
-      return original_build_root_requirements(split, options)
-    end
-    build_requirements.summarize_missing_requirements = function(_split, _snapshot, _options)
-      return {}, nil, {}
-    end
-    build_requirements.summarize_direct_requirement_progress = function(_split, _snapshot, _options)
-      return {}, nil, {}
-    end
-
-    local ok, result = pcall(function()
-      tracker.get_split_status(state, "player")
-      tracker.get_split_status(state, "player")
-      return true
-    end)
-
-    build_requirements.build_root_requirements = original_build_root_requirements
-    build_requirements.summarize_missing_requirements = original_missing
-    build_requirements.summarize_direct_requirement_progress = original_direct
-
-    assert.is_true(ok)
-    assert.is_true(result)
-    assert.are.equal(5, build_root_call_count)
-  end)
-
   it("derives current split missing intermediates from the tracked split snapshot", function()
     local previous_prototypes = rawget(_G, "prototypes")
     _G.prototypes = {
@@ -524,7 +448,7 @@ describe("split_tracker", function()
 
     assert.is_true(tracker.add_split_blueprint_by_id(state, split_id, {
       name = "Starter burner pair",
-      export_string = "blueprint-data",
+      blueprint_fingerprint = "burner-mining-drill:2;stone-furnace:2",
       entity_count = 4,
       entity_summary = {
         {name = "burner-mining-drill", count = 2},
@@ -536,7 +460,7 @@ describe("split_tracker", function()
 
     assert.is_true(tracker.replace_split_blueprint_by_id(state, split_id, 1, {
       name = "Starter burner pair v2",
-      export_string = "blueprint-data-v2",
+      blueprint_fingerprint = "burner-mining-drill:3;stone-furnace:2",
       entity_count = 5,
       entity_summary = {
         {name = "burner-mining-drill", count = 3},

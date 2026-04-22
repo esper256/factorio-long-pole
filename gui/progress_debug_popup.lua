@@ -2,6 +2,9 @@ local slot_grid = require("gui.slot_grid")
 
 local M = {}
 
+-- This popup is intentionally simple: it exposes the tracker ledger directly so
+-- reviewers can spot accounting drift without interpreting the higher-level UI.
+
 local GRID_COLUMNS = 8
 local GRID_SLOT_SIZE = 36
 local GRID_MAX_HEIGHT = 180
@@ -80,6 +83,8 @@ function M.add(parent, snapshot)
   add_section(content, "Loose", loose_entries)
 
   if snapshot.uncertainty and snapshot.uncertainty.since_tick ~= nil then
+    -- Surface uncertainty is a first-class signal. Showing it here makes it
+    -- clear when the tracker is guessing instead of silently pretending to know.
     local warning = content.add({
       type = "label",
       caption = "Estimate may be out of sync"

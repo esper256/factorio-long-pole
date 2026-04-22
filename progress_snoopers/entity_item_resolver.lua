@@ -1,5 +1,9 @@
 local M = {}
 
+-- Entity-to-item mapping is occasionally ambiguous in Factorio, so resolve the
+-- most explicit signal available from the event before falling back to prototype
+-- hints or, worst case, the entity name itself.
+
 local function first_place_item(items_to_place_this)
   if type(items_to_place_this) ~= "table" then
     return nil

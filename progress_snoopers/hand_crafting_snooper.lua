@@ -18,6 +18,8 @@ function M.on_pre_player_crafted_item(state, event)
     return false
   end
 
+  -- Reserve ingredients immediately so hand crafting does not look like stock
+  -- that is still available to satisfy current or next split requirements.
   return stock_adjuster.adjust_from_inventory(state, force_name, surface_name, event.items, -1)
 end
 
@@ -37,6 +39,8 @@ function M.on_player_crafted_item(state, event)
     event.item_stack.count
   )
 
+  -- Hand-crafted outputs appear in production statistics, so excluding them
+  -- there prevents them from being counted once by the event and again by polling.
   return adjusted_loose_stock or excluded_from_production_stats
 end
 

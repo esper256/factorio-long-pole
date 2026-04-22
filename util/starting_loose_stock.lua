@@ -2,6 +2,10 @@ local progress_tracker_store = require("progress_tracker_store")
 
 local M = {}
 
+-- Factorio starts a new character with items already in hand. Granting the same
+-- counts into loose-stock tracking prevents the planner from acting as if the
+-- run begins from an empty inventory.
+
 local STARTING_ITEMS = {
   {name = "firearm-magazine", count = 10},
   {name = "iron-plate", count = 8},

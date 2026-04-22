@@ -17,6 +17,8 @@ local function clamp_progress(progress)
     return nil
   end
 
+  -- Progress comes from layered heuristics, so clamp transient under/overshoot
+  -- instead of letting the GUI render nonsensical bars.
   if numeric < 0 then
     return 0
   end
@@ -155,6 +157,8 @@ function M.set_data(root, entry, options)
   end
 
   if progress then
+    -- Hiding the bar entirely for nil progress keeps purely informational icons
+    -- from looking like zero-progress tasks.
     progress.visible = normalized_progress ~= nil and options.show_progress ~= false
     progress.value = normalized_progress or 0
     progress.style.color = entry and entry.progress_color or options.progress_color or DEFAULT_PROGRESS_COLOR

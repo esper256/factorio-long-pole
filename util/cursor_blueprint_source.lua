@@ -1,5 +1,10 @@
 local M = {}
 
+-- Factorio exposes held blueprints through slightly different APIs depending on
+-- whether the source is a cursor stack, a library record, or blueprint setup
+-- state. This module hides those differences so callers can reason about one
+-- normalized selection result.
+
 local function safe_index(root, key)
   if root == nil then
     return nil
@@ -29,6 +34,8 @@ local function call_method(target, method_name, ...)
     return false, nil
   end
 
+  -- Runtime objects and test doubles do not always agree on whether a method
+  -- expects colon-style or free-function invocation, so try both safely.
   local ok, result = pcall(method, target, ...)
   if ok then
     return true, result
@@ -62,6 +69,8 @@ local function cursor_candidates(player, include_blueprint_to_setup)
     }
   }
 
+  -- Prefer the library record when both record and stack point at the same held
+  -- item because records preserve book-path metadata we use for refresh hints.
   if include_blueprint_to_setup then
     candidates[#candidates + 1] = {
       carrier = "blueprint_to_setup",
@@ -139,6 +148,8 @@ function M.resolve_selected_blueprint(player, options)
   local source_book_active_index = nil
 
   if source_type == "blueprint-book" then
+    -- Keep the enclosing book context so imported split links can later search
+    -- for the same blueprint in the player's library.
     source_book_label = safe_index(source, "label")
 
     if match.carrier == "cursor_record" then

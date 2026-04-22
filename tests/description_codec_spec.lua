@@ -1,54 +1,6 @@
 local codec = require("util.description_codec")
 
 describe("description_codec", function()
-  it("documents the intended top-level plan description format", function()
-    assert.are.equal([[format=long-pole-plan;version=1
-plan_id=plan-42
-visibility=references-only
-default_surface=nauvis
-]], codec.example_plan_description)
-  end)
-
-  it("documents the intended split description format with section headers", function()
-    assert.are.equal([[format=long-pole-split;version=1
-surface=nauvis
-
---- Extra Items ---
-transport-belt=200
-iron-chest=3
-
---- Technologies to Research ---
-automation
-logistics
-
---- Notes ---
-Feed gears before circuits.
-]], codec.example_split_description)
-  end)
-
-  it("documents the intended lightweight blueprint link description format for nested books", function()
-    assert.are.equal([[format=long-pole-blueprint-link;version=1
-link_mode=reference
-library_root=player-blueprints
-inside_book=Any% Openers
-inside_book=Burner Starts
-inside_book=Safe Variants
-blueprint_name=Starter burner pair
-blueprint_slot=2
-fingerprint=burner-mining-drill:2;stone-furnace:2
-]], codec.example_blueprint_link_description)
-  end)
-
-  it("documents the intended lightweight blueprint link description format for root library entries", function()
-    assert.are.equal([[format=long-pole-blueprint-link;version=1
-link_mode=reference
-library_root=player-blueprints
-blueprint_name=Direct Library Blueprint
-blueprint_slot=7
-fingerprint=transport-belt:12;inserter:4
-]], codec.example_blueprint_link_root_description)
-  end)
-
   it("exports plan descriptions", function()
     local description = assert(codec.export_to_description({
       format = "long-pole-plan",
@@ -86,6 +38,7 @@ fingerprint=transport-belt:12;inserter:4
       inside_books = {"Any% Openers", "Burner Starts", "Safe Variants"},
       blueprint_name = "Starter burner pair",
       blueprint_slot = 2,
+      blueprint_fingerprint = "burner-mining-drill:2;stone-furnace:2",
       entity_summary = {
         {name = "burner-mining-drill", count = 2},
         {name = "stone-furnace", count = 2}
@@ -137,7 +90,7 @@ fingerprint=transport-belt:12;inserter:4
       inside_books = {"Any% Openers", "Burner Starts", "Safe Variants"},
       blueprint_name = "Starter burner pair",
       blueprint_slot = 2,
-      fingerprint = "burner-mining-drill:2;stone-furnace:2",
+      blueprint_fingerprint = "burner-mining-drill:2;stone-furnace:2",
       name = "Starter burner pair",
       source_book_label = "Any% Openers",
       source_book_active_index = 2,
@@ -160,7 +113,7 @@ fingerprint=transport-belt:12;inserter:4
       inside_books = {},
       blueprint_name = "Direct Library Blueprint",
       blueprint_slot = 7,
-      fingerprint = "transport-belt:12;inserter:4",
+      blueprint_fingerprint = "transport-belt:12;inserter:4",
       name = "Direct Library Blueprint",
       source_book_label = nil,
       source_book_active_index = 7,

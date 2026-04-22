@@ -121,12 +121,6 @@ describe("plan_storage", function()
       blueprint_description = spec.blueprint_description
     }
 
-    if spec.export_string then
-      function record.export_record()
-        return spec.export_string
-      end
-    end
-
     if spec.type == "blueprint-book" then
       record.contents = spec.contents or {}
     end
@@ -142,9 +136,6 @@ describe("plan_storage", function()
         return record._entities
       end
 
-      function record.export_record()
-        return spec.export_string
-      end
     end
 
     return record
@@ -227,7 +218,7 @@ inside_book=Any% Openers
 inside_book=Burner Starts
 blueprint_name=Starter burner pair
 blueprint_slot=2
-fingerprint=burner-mining-drill:2;stone-furnace:2
+blueprint_fingerprint=burner-mining-drill:2;stone-furnace:2
 ]]
 
     local decoded = assert(plan_storage.decode_plan_from_item_stack(plan_book))
@@ -251,7 +242,7 @@ fingerprint=burner-mining-drill:2;stone-furnace:2
               inside_books = {"Any% Openers", "Burner Starts"},
               blueprint_name = "Starter burner pair",
               blueprint_slot = 2,
-              fingerprint = "burner-mining-drill:2;stone-furnace:2",
+              blueprint_fingerprint = "burner-mining-drill:2;stone-furnace:2",
               name = "Starter burner pair",
               source_book_label = "Any% Openers",
               source_book_active_index = 2,
@@ -314,7 +305,7 @@ library_root=player-blueprints
 inside_book=Openers
 blueprint_name=First Blueprint
 blueprint_slot=2
-fingerprint=burner-mining-drill:2
+blueprint_fingerprint=burner-mining-drill:2
 ]]
 
     local second_blueprint = ensure_slot(first_split.get_inventory(1), 5, slot_count)
@@ -333,7 +324,7 @@ library_root=player-blueprints
 inside_book=Openers
 blueprint_name=Second Blueprint
 blueprint_slot=5
-fingerprint=stone-furnace:2
+blueprint_fingerprint=stone-furnace:2
 ]]
 
     local second_split = ensure_slot(plan_book.get_inventory(1), 5, slot_count)
@@ -432,7 +423,7 @@ library_root=player-blueprints
 inside_book=Any% Openers
 blueprint_name=Starter burner pair
 blueprint_slot=2
-fingerprint=burner-mining-drill:2;stone-furnace:2
+blueprint_fingerprint=burner-mining-drill:2;stone-furnace:2
 ]], blueprint_link.blueprint_description)
   end)
 
@@ -703,32 +694,26 @@ From shared library.
     assert.are.equal("Shared Imported Split", state.splits[1].name)
   end)
 
-  it("recovers plan and split labels from exported record data when record labels are unavailable", function()
-    with_mocked_label_imports({
-      ["plan-record-export"] = "Recovered Record Plan",
-      ["split-record-export"] = "Recovered Record Split"
-    }, function()
-      local state = {}
-      tracker.init(state)
-      plan_storage.create_new_plan(state)
+  it("falls back to default plan and split names when record labels are unavailable", function()
+    local state = {}
+    tracker.init(state)
+    plan_storage.create_new_plan(state)
 
-      local player = {
-        cursor_stack = {
-          valid_for_read = false
-        },
-        cursor_record = make_record({
-          type = "blueprint-book",
-          export_string = "plan-record-export",
-          blueprint_description = [[format=long-pole-plan;version=1
+    local player = {
+      cursor_stack = {
+        valid_for_read = false
+      },
+      cursor_record = make_record({
+        type = "blueprint-book",
+        blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-record-export
 visibility=references-only
 default_surface=nauvis
 ]],
-          contents = {
-            [1] = make_record({
-              type = "blueprint-book",
-              export_string = "split-record-export",
-              blueprint_description = [[format=long-pole-split;version=1
+        contents = {
+          [1] = make_record({
+            type = "blueprint-book",
+            blueprint_description = [[format=long-pole-split;version=1
 surface=nauvis
 
 --- Extra Items ---
@@ -739,17 +724,16 @@ wood=5
 --- Notes ---
 Recovered from export.
 ]]
-            })
-          }
-        })
-      }
+          })
+        }
+      })
+    }
 
-      local ok, error_message = plan_storage.import_plan_from_cursor(player, state)
+    local ok, error_message = plan_storage.import_plan_from_cursor(player, state)
 
-      assert.is_true(ok)
-      assert.is_nil(error_message)
-      assert.are.equal("Recovered Record Plan", state.plan_name)
-      assert.are.equal("Recovered Record Split", state.splits[1].name)
-    end)
+    assert.is_true(ok)
+    assert.is_nil(error_message)
+    assert.are.equal("Untitled Plan", state.plan_name)
+    assert.are.equal("Split 1", state.splits[1].name)
   end)
 end)

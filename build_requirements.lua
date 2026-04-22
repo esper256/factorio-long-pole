@@ -6,6 +6,11 @@ local RAW_RESOURCES_BY_SURFACE = config.raw_resources_by_surface or {}
 local HIDDEN_RAW_RESOURCES_BY_SURFACE = config.hidden_raw_resources_by_surface or {}
 local IGNORED_REQUIREMENT_KEYS = config.ignored_requirement_keys or {}
 
+-- This module turns split definitions plus runtime stock snapshots into the
+-- planning views the UI needs: direct progress, missing intermediates, and raw
+-- resource cost. Most of the complexity is about preserving split semantics
+-- while staying conservative around recipe ambiguity.
+
 local function try_index(root, key)
   if root == nil then
     return nil
@@ -116,6 +121,9 @@ end
 local function score_totals(totals)
   local score = 0
   for _, entry in pairs(totals or {}) do
+    -- Prefer production paths that bottom out in true raw resources. Penalizing
+    -- manufactured intermediates keeps raw-cost expansion from "solving" a plate
+    -- by recursively requiring another processed item instead of ore.
     if is_raw_resource(entry.kind, entry.name, "nauvis")
       or is_raw_resource(entry.kind, entry.name, "vulcanus")
       or is_raw_resource(entry.kind, entry.name, "fulgora")
@@ -142,6 +150,7 @@ local function resolve_raw_cost_entry(kind, name, surface_name, resolve_recipe_s
   end
 
   if active_stack[entry_key] then
+    -- Cycles show up with modded recipes and would recurse forever otherwise.
     return nil, ("Detected a recipe cycle while resolving %s on %s."):format(
       format_requirement_key(kind, name),
       surface_name
@@ -354,6 +363,9 @@ local function build_root_requirements(split, options)
   local item_satisfaction_mode = options.item_satisfaction_mode or "loose_only"
   local technology_satisfaction_mode = options.technology_satisfaction_mode or "loose_only"
 
+  -- Satisfaction modes are what preserve split semantics downstream:
+  -- blueprints can require placed entities, stock goals only consume loose
+  -- items, and research currently behaves like a stock goal for science packs.
   if include_blueprints then
     for _, blueprint in ipairs(split.blueprints or {}) do
       for _, entry in ipairs(blueprint.entity_summary or {}) do
@@ -425,9 +437,12 @@ local function build_requirement_pools(snapshot)
     placed_by_key = {}
   }
 
+  -- `current_split_claim` intentionally only reserves placements already
+  -- credited to this split, so previous split entities do not satisfy a new
+  -- placement goal just because they happen to use the same item.
   for _, entry in ipairs(snapshot and snapshot.entries or {}) do
     local key = format_requirement_key("item", entry.item_name)
-    pools.stock_by_key[key] = math.max(0, tonumber(entry.loose_stock) or 0)
+    pools.stock_by_key[key] = tonumber(entry.loose_stock) or 0
     pools.placed_by_key[key] = math.max(0, tonumber(entry.current_split_claim) or 0)
   end
 
@@ -481,6 +496,9 @@ local function reserve_direct_requirement(pools, kind, name, count, satisfaction
   end
 
   if satisfaction_mode == "placed_or_loose" then
+    -- When a requirement can be satisfied by already-placed entities, consume
+    -- those claims before loose stock so the next-split readiness view does not
+    -- incorrectly treat them as carry-over inventory.
     reserved = reserved + reserve_from_pool(pools.placed_by_key, key, count)
     reserved = reserved + reserve_from_pool(pools.stock_by_key, key, count - reserved)
     return reserved
@@ -558,6 +576,8 @@ local function choose_recipe_for_missing_requirement(kind, name, remaining_count
         },
         progress_entries_by_key = {}
       }
+      -- Candidate recipes are evaluated against cloned pools so a losing branch
+      -- cannot consume stock needed by the winning branch.
       local error_message = nil
 
       for _, ingredient in ipairs(recipe.ingredients or {}) do
@@ -722,6 +742,8 @@ function M.summarize_missing_requirements(split, snapshot, options)
     first_error_message = first_error_message or error_message
   end
 
+  -- Keep the best partial summary even if one branch cannot be resolved. That
+  -- lets the UI stay informative instead of collapsing to a single fatal error.
   return requirement_progress_to_summary(context.progress_entries_by_key), first_error_message, context.pools
 end
 

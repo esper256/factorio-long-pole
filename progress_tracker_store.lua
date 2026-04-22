@@ -1,28 +1,11 @@
 local M = {}
 
 local STORAGE_VERSION = 2
-local DEFAULT_FORCE_NAME = "player"
 
-local function normalize_force_name(force_name)
-  if type(force_name) ~= "string" or force_name == "" then
-    return DEFAULT_FORCE_NAME
-  end
-  return force_name
-end
-
-local function normalize_surface_name(surface_name)
-  if type(surface_name) ~= "string" or surface_name == "" then
-    return nil
-  end
-  return surface_name
-end
-
-local function normalize_item_name(item_name)
-  if type(item_name) ~= "string" or item_name == "" then
-    return nil
-  end
-  return item_name
-end
+-- The progress store is the runtime ledger behind every split calculation. Its
+-- main invariants are: never report negative stock, keep placed entities
+-- separate from loose stock, and preserve enough provenance to undo a placement
+-- when the entity is mined or replaced later.
 
 local function normalize_non_negative_count(value)
   return math.max(0, math.floor(tonumber(value) or 0))
@@ -57,8 +40,11 @@ local function ensure_root(state)
 end
 
 local function ensure_force(root, force_name)
-  local normalized_force_name = normalize_force_name(force_name)
-  local force = root.forces[normalized_force_name]
+  if type(force_name) ~= "string" or force_name == "" then
+    return nil
+  end
+
+  local force = root.forces[force_name]
   if force then
     force.surfaces = force.surfaces or {}
     return force
@@ -67,18 +53,20 @@ local function ensure_force(root, force_name)
   force = {
     surfaces = {}
   }
-  root.forces[normalized_force_name] = force
+  root.forces[force_name] = force
   return force
 end
 
 local function ensure_surface(root, force_name, surface_name)
-  local normalized_surface_name = normalize_surface_name(surface_name)
-  if not normalized_surface_name then
+  if type(surface_name) ~= "string" or surface_name == "" then
     return nil
   end
 
   local force = ensure_force(root, force_name)
-  local surface = force.surfaces[normalized_surface_name]
+  if not force then
+    return nil
+  end
+  local surface = force.surfaces[surface_name]
   if surface then
     surface.loose_stock = surface.loose_stock or {}
     surface.placed_counts = surface.placed_counts or {}
@@ -99,7 +87,7 @@ local function ensure_surface(root, force_name, surface_name)
     production_input_exclusions = {},
     uncertainty = {}
   }
-  force.surfaces[normalized_surface_name] = surface
+  force.surfaces[surface_name] = surface
   return surface
 end
 
@@ -111,6 +99,8 @@ end
 
 local function change_placed_count(surface, item_name, delta)
   local current = surface.placed_counts[item_name] or 0
+  -- Event ordering is not perfect across all build/mine paths, so clamp to zero
+  -- instead of letting transient mismatches create impossible negative counts.
   local updated = math.max(0, current + delta)
   if updated == current then
     return updated
@@ -122,7 +112,10 @@ end
 
 local function change_loose_stock(surface, item_name, delta)
   local current = surface.loose_stock[item_name] or 0
-  local updated = math.max(0, current + delta)
+  -- Loose stock can go temporarily negative when complementary events arrive in
+  -- different ticks. Preserve the raw delta here so the next reconciliation pass
+  -- can cancel it out instead of biasing the ledger upward.
+  local updated = current + delta
   if updated == current then
     return updated
   end
@@ -271,57 +264,78 @@ function M.ensure_surface(state, force_name, surface_name)
 end
 
 function M.set_loose_stock(state, force_name, surface_name, item_name, count)
-  local normalized_item_name = normalize_item_name(item_name)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
-  if not (surface and normalized_item_name) then
+  if not surface or type(item_name) ~= "string" or item_name == "" then
     return false
   end
 
   local normalized_count = normalize_non_negative_count(count)
-  local current = surface.loose_stock[normalized_item_name] or 0
+  local current = surface.loose_stock[item_name] or 0
   if normalized_count == current then
     return true
   end
 
-  surface.loose_stock[normalized_item_name] = normalized_count
-  remove_zero_entry(surface.loose_stock, normalized_item_name)
+  surface.loose_stock[item_name] = normalized_count
+  remove_zero_entry(surface.loose_stock, item_name)
   return true
 end
 
 function M.adjust_loose_stock(state, force_name, surface_name, item_name, delta)
-  local normalized_item_name = normalize_item_name(item_name)
   local normalized_delta = normalize_delta(delta)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
-  if not (surface and normalized_item_name and normalized_delta) then
+  if not surface or type(item_name) ~= "string" or item_name == "" or not normalized_delta then
     return false
   end
 
-  change_loose_stock(surface, normalized_item_name, normalized_delta)
+  change_loose_stock(surface, item_name, normalized_delta)
   return true
 end
 
 function M.get_loose_stock(state, force_name, surface_name, item_name)
-  local normalized_item_name = normalize_item_name(item_name)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
-  if not (surface and normalized_item_name) then
+  if not surface or type(item_name) ~= "string" or item_name == "" then
     return 0
   end
 
-  return surface.loose_stock[normalized_item_name] or 0
+  return surface.loose_stock[item_name] or 0
+end
+
+function M.clamp_all_loose_stock_to_non_negative(state)
+  local root = ensure_root(state)
+  local changed = false
+
+  for _, force in pairs(root.forces or {}) do
+    for _, surface in pairs(force.surfaces or {}) do
+      for item_name, count in pairs(surface.loose_stock or {}) do
+        if count < 0 then
+          surface.loose_stock[item_name] = 0
+          remove_zero_entry(surface.loose_stock, item_name)
+          changed = true
+        end
+      end
+    end
+  end
+
+  return changed
 end
 
 function M.upsert_placed_entity(state, entity)
   local unit_number = entity and entity.unit_number
-  local force_name = normalize_force_name(entity and entity.force_name)
-  local surface_name = normalize_surface_name(entity and entity.surface_name)
-  local item_name = normalize_item_name(entity and entity.item_name)
-  if unit_number == nil or not surface_name or not item_name then
+  local force_name = entity and entity.force_name
+  local surface_name = entity and entity.surface_name
+  local item_name = entity and entity.item_name
+  if unit_number == nil
+    or type(force_name) ~= "string" or force_name == ""
+    or type(surface_name) ~= "string" or surface_name == ""
+    or type(item_name) ~= "string" or item_name == "" then
     return false
   end
 
   local root = ensure_root(state)
   local old_location = root.placed_entity_index[unit_number]
   if old_location then
+    -- Replacements and blueprint ghosts can reuse a unit number path. Remove the
+    -- old claim first so an entity move never leaves duplicate placed counts.
     local old_surface = ensure_surface(root, old_location.force_name, old_location.surface_name)
     local old_entity = old_surface and old_surface.placed_entities[unit_number] or nil
     if old_entity then
@@ -372,35 +386,32 @@ function M.remove_placed_entity(state, unit_number)
 end
 
 function M.get_placed_count(state, force_name, surface_name, item_name)
-  local normalized_item_name = normalize_item_name(item_name)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
-  if not (surface and normalized_item_name) then
+  if not surface or type(item_name) ~= "string" or item_name == "" then
     return 0
   end
 
-  return surface.placed_counts[normalized_item_name] or 0
+  return surface.placed_counts[item_name] or 0
 end
 
 function M.add_production_input_exclusion(state, force_name, surface_name, item_name, count)
-  local normalized_item_name = normalize_item_name(item_name)
   local normalized_count = normalize_non_negative_count(count)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
-  if not (surface and normalized_item_name) or normalized_count == 0 then
+  if not surface or type(item_name) ~= "string" or item_name == "" or normalized_count == 0 then
     return false
   end
 
-  change_non_negative_count(surface.production_input_exclusions, normalized_item_name, normalized_count)
+  change_non_negative_count(surface.production_input_exclusions, item_name, normalized_count)
   return true
 end
 
 function M.get_production_totals(state, force_name, surface_name, item_name)
-  local normalized_item_name = normalize_item_name(item_name)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
-  if not (surface and normalized_item_name) then
+  if not surface or type(item_name) ~= "string" or item_name == "" then
     return 0, 0
   end
 
-  local totals = surface.production_totals[normalized_item_name]
+  local totals = surface.production_totals[item_name]
   if not totals then
     return 0, 0
   end
@@ -434,24 +445,29 @@ function M.sync_item_production_statistics(state, force_name, surface_name, stat
   local handled = false
 
   for item_name in pairs(item_names) do
-    local normalized_item_name = normalize_item_name(item_name)
-    if normalized_item_name then
-      local totals = ensure_production_total(surface, normalized_item_name)
-      local current_input_count = normalize_statistics_count(input_counts[normalized_item_name])
-      local current_output_count = normalize_statistics_count(output_counts[normalized_item_name])
+    if type(item_name) == "string" and item_name ~= "" then
+      local totals = ensure_production_total(surface, item_name)
+      local current_input_count = normalize_statistics_count(input_counts[item_name])
+      local current_output_count = normalize_statistics_count(output_counts[item_name])
 
       if current_input_count < totals.last_input_count or current_output_count < totals.last_output_count then
+        -- Statistics counters can reset across save/load or other engine-level
+        -- transitions. Treat decreases as a new baseline instead of fabricated
+        -- negative production deltas.
         totals.last_input_count = current_input_count
         totals.last_output_count = current_output_count
         handled = true
       else
         local produced_delta = current_input_count - totals.last_input_count
         local consumed_delta = current_output_count - totals.last_output_count
-        local excluded_produced = math.min(produced_delta, surface.production_input_exclusions[normalized_item_name] or 0)
+        -- Hand crafting and mined resource drops are already accounted for by
+        -- direct events, so subtract their exclusions before treating stats as
+        -- newly produced loose stock.
+        local excluded_produced = math.min(produced_delta, surface.production_input_exclusions[item_name] or 0)
         local applied_produced_delta = produced_delta - excluded_produced
 
         if excluded_produced > 0 then
-          change_non_negative_count(surface.production_input_exclusions, normalized_item_name, -excluded_produced)
+          change_non_negative_count(surface.production_input_exclusions, item_name, -excluded_produced)
         end
 
         if applied_produced_delta > 0 then
@@ -461,7 +477,7 @@ function M.sync_item_production_statistics(state, force_name, surface_name, stat
           totals.consumed_total = totals.consumed_total + consumed_delta
         end
         if applied_produced_delta ~= 0 or consumed_delta ~= 0 then
-          change_loose_stock(surface, normalized_item_name, applied_produced_delta - consumed_delta)
+          change_loose_stock(surface, item_name, applied_produced_delta - consumed_delta)
           handled = true
         end
         if excluded_produced ~= 0 then
@@ -505,11 +521,10 @@ function M.clear_surface_uncertainty(state, force_name, surface_name)
 end
 
 function M.get_surface_snapshot(state, force_name, surface_name, split_id)
-  local resolved_force_name = normalize_force_name(force_name)
-  local surface = ensure_surface(ensure_root(state), resolved_force_name, surface_name)
+  local surface = ensure_surface(ensure_root(state), force_name, surface_name)
   if not surface then
     return {
-      force_name = resolved_force_name,
+      force_name = force_name,
       surface_name = surface_name,
       entries = {},
       uncertainty = {}
@@ -521,12 +536,14 @@ function M.get_surface_snapshot(state, force_name, surface_name, split_id)
   local entries = {}
   for index, entry in ipairs(base_entries) do
     local copied_entry = copy_item_entry(entry)
+    -- Snapshot copies prevent GUI and requirement code from mutating the live
+    -- ledger while still exposing split-scoped placement claims.
     copied_entry.current_split_claim = split_counts and (split_counts[copied_entry.item_name] or 0) or 0
     entries[index] = copied_entry
   end
 
   return {
-    force_name = resolved_force_name,
+    force_name = force_name,
     surface_name = surface_name,
     entries = entries,
     uncertainty = {

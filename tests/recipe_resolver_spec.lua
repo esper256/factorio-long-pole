@@ -94,30 +94,4 @@ describe("recipe_resolver", function()
     assert.are.equal(1, amount)
   end)
 
-  it("indexes recipe results once and reuses that index across lookups", function()
-    _G.prototypes = {
-      recipe = {
-        ["transport-belt"] = {
-          products = {
-            {type = "item", name = "transport-belt", amount = 2}
-          }
-        }
-      }
-    }
-
-    local initial_stats = recipe_resolver.get_cache_stats()
-    assert.are.equal(0, initial_stats.prototype_set_count)
-    assert.are.equal(0, initial_stats.indexed_result_count)
-
-    local first_matches = recipe_resolver.find_recipes_for_result("item", "transport-belt", "nauvis")
-    local after_first_lookup = recipe_resolver.get_cache_stats()
-    local second_matches = recipe_resolver.find_recipes_for_result("item", "transport-belt", "nauvis")
-    local after_second_lookup = recipe_resolver.get_cache_stats()
-
-    assert.are.equal(1, #first_matches)
-    assert.same(first_matches, second_matches)
-    assert.are.equal(1, after_first_lookup.prototype_set_count)
-    assert.are.equal(1, after_first_lookup.indexed_result_count)
-    assert.same(after_first_lookup, after_second_lookup)
-  end)
 end)

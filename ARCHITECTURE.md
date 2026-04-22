@@ -127,20 +127,20 @@ The mod should not claim:
 
 Instead, the mod should claim:
 
-- linked blueprints can usually be refreshed from the player's library
+- blueprint symlinks can usually be refreshed from the player's library
 - exact path-and-name matches are preferred
 - ambiguous or missing matches are surfaced clearly to the player
 
-### Stored blueprint link data
+### Stored blueprint symlink data
 
 When a blueprint is associated with a split, the plan should store both a snapshot of the blueprint-derived planning data and a set of link hints used for future refresh.
 
-Each linked blueprint record should include, at minimum:
+Each blueprint symlink record should include, at minimum:
 
 - `blueprint_name`
 - `book_path_by_name`
 - `book_local_index`
-- `exported_blueprint_fingerprint`
+- `blueprint_fingerprint`
 - `entity_summary`
 - `tile_summary` if useful later
 - any extracted planning data the split needs immediately, such as entity counts, item costs, and build-relevant metadata
@@ -151,7 +151,7 @@ The key design idea is that **blueprint name is the primary human-facing key**, 
 
 ### Refresh matching pipeline
 
-`Refresh Linked Blueprints` should resolve each linked blueprint using a deterministic series of increasingly permissive searches:
+`Refresh Linked Blueprints` should resolve each blueprint symlink using a deterministic series of increasingly permissive searches:
 
 1. Exact path match: same blueprint-book path by name and same blueprint name.
 2. Same path unique-name match: same book path by name and exactly one blueprint with that name.
@@ -163,7 +163,7 @@ This matching order preserves ergonomics without becoming reckless. The mod shou
 
 ### Resolution states
 
-Each linked blueprint should surface a resolution state in the editor. The exact UI can evolve later, but the data model should assume states such as:
+Each blueprint symlink should surface a resolution state in the editor. The exact UI can evolve later, but the data model should assume states such as:
 
 - `exact`
 - `relocated`
@@ -325,7 +325,7 @@ Each split book contains one child blueprint entry per linked blueprint.
 The default export mode is a lightweight **reference-style** export:
 
 - The child entry is still a blueprint item so the split book remains easy to reorder by hand in Factorio's UI.
-- The child blueprint description stores the link metadata and planning fingerprint.
+- The child blueprint description stores the blueprint symlink metadata and planning fingerprint.
 - The child blueprint does not need to contain the full original blueprint payload in the default export mode.
 
 Current shape:
@@ -339,7 +339,7 @@ inside_book=Burner Starts
 inside_book=Safe Variants
 blueprint_name=Starter burner pair
 blueprint_slot=2
-fingerprint=burner-mining-drill:2;stone-furnace:2
+blueprint_fingerprint=burner-mining-drill:2;stone-furnace:2
 ```
 
 Notes on path encoding:
@@ -354,7 +354,7 @@ This avoids separator-escaping problems when blueprint book names contain charac
 
 The storage model should explicitly distinguish between:
 
-- **Reference export**: split books contain lightweight blueprint link entries with planning fingerprints.
+- **Reference export**: split books contain lightweight blueprint symlink entries with planning fingerprints.
 - **Copied export**: split books contain full copied blueprints so the plan is self-contained and shareable with players who do not have the same blueprint library.
 
 The current default format is reference export. A future option may enable copied exports without changing the surrounding book-of-books structure.

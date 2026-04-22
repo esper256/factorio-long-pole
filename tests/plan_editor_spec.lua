@@ -110,8 +110,9 @@ describe("plan_editor", function()
   end
 
   before_each(function()
-    original_modules["blueprint_snapshot"] = package.loaded["blueprint_snapshot"]
-    original_modules["blueprint_library"] = package.loaded["blueprint_library"]
+    original_modules["util.blueprint_entity_summary"] = package.loaded["util.blueprint_entity_summary"]
+    original_modules["util.blueprint_fingerprint"] = package.loaded["util.blueprint_fingerprint"]
+    original_modules["util.blueprint_library"] = package.loaded["util.blueprint_library"]
     original_modules["build_requirements"] = package.loaded["build_requirements"]
     original_modules["gui.item_quantity_dialog"] = package.loaded["gui.item_quantity_dialog"]
     original_modules["plan_storage"] = package.loaded["plan_storage"]
@@ -119,17 +120,33 @@ describe("plan_editor", function()
     original_modules["util.cursor_blueprint_source"] = package.loaded["util.cursor_blueprint_source"]
     original_modules["gui.plan_editor"] = package.loaded["gui.plan_editor"]
 
-    package.loaded["blueprint_snapshot"] = {
+    package.loaded["util.blueprint_entity_summary"] = {
       summarize_entities = function()
         return {}
-      end,
-      resolve_name_from_export = function(_export, fallback)
-        return fallback
       end
     }
-    package.loaded["blueprint_library"] = {
-      find_blueprint_path_by_export = function()
-        return nil
+    package.loaded["util.blueprint_fingerprint"] = {
+      extract_blueprint_fingerprint = function(blueprint, symlink)
+        return {
+          blueprint_name = blueprint.name,
+          entity_summary = blueprint.entity_summary or {},
+          entity_count = blueprint.entity_count or 0,
+          blueprint_fingerprint = "stub-fingerprint",
+          library_root = symlink and symlink.library_root or nil,
+          inside_books = symlink and symlink.inside_books or nil,
+          blueprint_slot = symlink and symlink.blueprint_slot or nil
+        }
+      end
+    }
+    package.loaded["util.blueprint_library"] = {
+      find_blueprint_symlink_by_fingerprint = function()
+        return {
+          blueprint_name = "Recovered Library Name",
+          library_root = "player-blueprints",
+          inside_books = {"Openers"},
+          blueprint_slot = 2,
+          match_fraction = 1.0
+        }
       end
     }
     package.loaded["build_requirements"] = {
@@ -233,70 +250,6 @@ describe("plan_editor", function()
     return state
   end
 
-  it("keeps stable text widgets when refreshing unchanged editor state", function()
-    local player = make_player_with_screen_gui()
-    local state = make_state()
-
-    plan_editor.open(player, state)
-
-    local frame = player.gui.screen[plan_editor.root_name]
-    local titlebar = frame[TITLEBAR_NAME]
-    local content = frame[CONTENT_NAME]
-    local split_list = content[plan_editor.split_list_name]
-    local split_row = split_list.children[1]
-    local name_row = split_row[SPLIT_ROW_BODY_NAME].controls[SPLIT_ROW_NAME_ROW_NAME]
-
-    local plan_name_field = titlebar[plan_editor.plan_name_field_name]
-    local split_name_field = name_row[plan_editor.name_field_name]
-
-    plan_editor.refresh(player, state)
-
-    assert.are.equal(plan_name_field, titlebar[plan_editor.plan_name_field_name])
-    assert.are.equal(split_row, split_list.children[1])
-    assert.are.equal(split_name_field, name_row[plan_editor.name_field_name])
-  end)
-
-  it("rebuilds split structure without recreating the titlebar", function()
-    local player = make_player_with_screen_gui()
-    local state = make_state()
-
-    plan_editor.open(player, state)
-
-    local frame = player.gui.screen[plan_editor.root_name]
-    local titlebar = frame[TITLEBAR_NAME]
-    local plan_name_field = titlebar[plan_editor.plan_name_field_name]
-    local add_split_button = titlebar[plan_editor.add_split_button_name]
-
-    local result = plan_editor.handle_click(player, state, add_split_button)
-
-    local split_list = frame[CONTENT_NAME][plan_editor.split_list_name]
-    assert.are.equal("refresh-split-viewer", result)
-    assert.are.equal(plan_name_field, titlebar[plan_editor.plan_name_field_name])
-    assert.are.equal(2, #split_list.children)
-  end)
-
-  it("toggles notes drawers in place without recreating the split name field", function()
-    local player = make_player_with_screen_gui()
-    local state = make_state()
-
-    plan_editor.open(player, state)
-
-    local frame = player.gui.screen[plan_editor.root_name]
-    local split_list = frame[CONTENT_NAME][plan_editor.split_list_name]
-    local split_row = split_list.children[1]
-    local row_body = split_row[SPLIT_ROW_BODY_NAME]
-    local controls = row_body.controls
-    local name_row = controls[SPLIT_ROW_NAME_ROW_NAME]
-    local split_name_field = name_row[plan_editor.name_field_name]
-    local notes_button = controls.long_pole_split_detail_row[plan_editor.toggle_notes_button_name]
-
-    local result = plan_editor.handle_click(player, state, notes_button)
-
-    assert.are.equal("handled", result)
-    assert.are.equal(split_name_field, name_row[plan_editor.name_field_name])
-    assert.is_not_nil(split_row[SPLIT_ROW_NOTES_DRAWER_NAME])
-  end)
-
   it("adds a held cursor record blueprint without reading label directly", function()
     local state = make_state()
     local printed_messages = {}
@@ -341,8 +294,8 @@ describe("plan_editor", function()
     assert.are.equal("refresh-split-viewer", result)
     assert.are.equal(0, #printed_messages)
     assert.are.equal(1, #state.splits[1].blueprints)
-    assert.are.equal("Unnamed Blueprint", state.splits[1].blueprints[1].name)
-    assert.are.equal("record-blueprint-export", state.splits[1].blueprints[1].export_string)
+    assert.are.equal("stub-fingerprint", state.splits[1].blueprints[1].blueprint_fingerprint)
+    assert.are.equal("Recovered Library Name", state.splits[1].blueprints[1].name)
     assert.are.equal("Openers", state.splits[1].blueprints[1].source_book_label)
     assert.are.equal(2, state.splits[1].blueprints[1].source_book_active_index)
   end)

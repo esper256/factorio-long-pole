@@ -2,6 +2,9 @@ local progress_tracker_store = require("progress_tracker_store")
 
 local M = {}
 
+-- Small wrapper around the store so snoopers can express inventory deltas in
+-- one place instead of each event handler open-coding stack iteration.
+
 function M.adjust_item_stack(state, force_name, surface_name, item_name, count_delta)
   if not (force_name and surface_name and item_name and count_delta and count_delta ~= 0) then
     return false

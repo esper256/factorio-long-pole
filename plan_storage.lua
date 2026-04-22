@@ -1,5 +1,6 @@
-local blueprint_snapshot = require("blueprint_snapshot")
-local blueprint_library = require("blueprint_library")
+local blueprint_entity_summary = require("util.blueprint_entity_summary")
+local blueprint_fingerprint = require("util.blueprint_fingerprint")
+local blueprint_library = require("util.blueprint_library")
 local description_codec = require("util.description_codec")
 local cursor_blueprint_source = require("util.cursor_blueprint_source")
 local tracker = require("split_tracker")
@@ -7,6 +8,10 @@ local tracker = require("split_tracker")
 local M = {}
 
 local DEFAULT_PLAN_NAME = "Untitled Plan"
+
+-- Plans move between saves as blueprint books. That keeps transfer in the
+-- player's normal workflow and avoids introducing a separate file format or
+-- external persistence mechanism.
 
 local function safe_index(root, key)
   if root == nil then
@@ -87,18 +92,7 @@ local function source_label(source)
   if label then
     return label
   end
-
-  local export_record = safe_index(source, "export_record")
-  if type(export_record) ~= "function" then
-    return nil
-  end
-
-  local ok, export_string = pcall(export_record, source)
-  if not ok or type(export_string) ~= "string" or export_string == "" then
-    return nil
-  end
-
-  return blueprint_snapshot.resolve_name_from_export(export_string, nil)
+  return nil
 end
 
 local function source_blueprint_description(source)
@@ -115,6 +109,9 @@ local function source_entries(source)
     return nil
   end
 
+  -- Blueprint books can come from either runtime item stacks or library records.
+  -- Normalize both shapes to a sorted slot list so import/export code can stay
+  -- agnostic about where the book came from.
   local contents = safe_index(source, "contents")
   if type(contents) == "table" then
     local ordered = {}
@@ -160,7 +157,6 @@ local function resolve_import_source(player)
 end
 
 local function apply_active_plan(state, plan, source)
-  blueprint_snapshot.refresh_plan_blueprints(plan)
   state.splits = plan.splits or {}
   state.plan_source = source
   state.plan_id = plan.plan_id or state.plan_id
@@ -197,7 +193,7 @@ local function find_plan_metadata_from_item_stack(item_stack)
   return metadata
 end
 
-local function extract_blueprint_snapshot(record, blueprint)
+local function extract_blueprint_metadata(record, blueprint)
   if not (record and record.is_blueprint and record.get_blueprint_entity_count) then
     return blueprint
   end
@@ -206,10 +202,10 @@ local function extract_blueprint_snapshot(record, blueprint)
     return blueprint
   end
 
-  blueprint.export_string = record.export_stack and record.export_stack() or blueprint.export_string
-  blueprint.entity_count = record.get_blueprint_entity_count()
-  blueprint.entity_summary = blueprint_snapshot.summarize_entities(record.get_blueprint_entities() or {})
-  blueprint.fingerprint = blueprint.fingerprint or nil
+  local extracted_fingerprint = blueprint_fingerprint.extract_blueprint_fingerprint(record, blueprint)
+  blueprint.entity_count = extracted_fingerprint.entity_count
+  blueprint.entity_summary = extracted_fingerprint.entity_summary
+  blueprint.blueprint_fingerprint = blueprint.blueprint_fingerprint or extracted_fingerprint.blueprint_fingerprint
   return blueprint
 end
 
@@ -218,6 +214,9 @@ local function configure_blueprint_link_carrier(stack)
     return true
   end
 
+  -- Long Pole stores blueprint symlink metadata in blueprint_description. The
+  -- placeholder entity only keeps Factorio treating this slot as a real
+  -- blueprint so that the symlink metadata survives round-trips.
   stack.set_blueprint_entities({
     {
       entity_number = 1,
@@ -243,6 +242,9 @@ local function decode_blueprint_reference(record)
     return nil, "Split book contains an empty blueprint without Long Pole link metadata."
   end
 
+  -- Symlink metadata is authoritative when present. That keeps lightweight
+  -- placeholder carriers usable even though their blueprint body is not the
+  -- thing Long Pole actually cares about.
   local blueprint = decoded or {
     name = source_label(record) or "Unnamed Blueprint"
   }
@@ -254,7 +256,7 @@ local function decode_blueprint_reference(record)
     return blueprint, nil
   end
 
-  return extract_blueprint_snapshot(record, blueprint), nil
+  return extract_blueprint_metadata(record, blueprint), nil
 end
 
 local function decode_split_from_book_item(book_item, split_index)
@@ -355,7 +357,7 @@ local function build_blueprint_link_description(blueprint)
     blueprint_slot = blueprint.blueprint_slot or blueprint.source_book_active_index,
     source_book_active_index = blueprint.source_book_active_index,
     entity_summary = blueprint.entity_summary,
-    fingerprint = blueprint.fingerprint
+    blueprint_fingerprint = blueprint.blueprint_fingerprint
   })
 end
 
@@ -429,6 +431,8 @@ function M.can_export_to_cursor(cursor_stack, state)
     return true
   end
 
+  -- Overwriting is only safe when the cursor already holds this same plan book.
+  -- That protects arbitrary player blueprints from being replaced by accident.
   local metadata = find_plan_metadata_from_item_stack(cursor_stack)
   if not metadata then
     return false

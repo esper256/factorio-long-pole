@@ -2,6 +2,10 @@ local slot_grid = require("gui.slot_grid")
 
 local M = {}
 
+-- This dialog is rebuilt from dialog state instead of incrementally mutated so
+-- slot toggles, counts, and future filters can stay in sync without bespoke UI
+-- patching code for each interaction.
+
 local DIALOG_WIDTH = 540
 local DIALOG_HEIGHT = 680
 local DEFAULT_MIN_COUNT = 1
@@ -85,6 +89,8 @@ local function list_item_entries()
     end
   end
 
+  -- Ordering by the game's item-group metadata keeps the picker aligned with
+  -- the crafting/inventory mental model speedrunners already use.
   table.sort(entries, function(a, b)
     local prototype_a = item_prototypes[a.name]
     local prototype_b = item_prototypes[b.name]
@@ -156,6 +162,8 @@ local function sync_controls(player, dialog)
     end
   end
 
+  -- The text field is the source of truth for arbitrary user input; syncing the
+  -- slider afterward prevents the two controls from drifting apart visually.
   local count_field = find_count_field(player)
   if count_field and count_field.valid and count_field.text ~= dialog.count_text then
     count_field.text = dialog.count_text
@@ -353,6 +361,8 @@ function M.handle_click(player, state, element)
       return {action = "handled"}
     end
 
+    -- Reopen from saved dialog state so the selected slot's toggled styling is
+    -- recreated consistently without trying to patch every button in place.
     dialog.elem_value = element.tags.item_name
     M.open(player, state, {
       title = dialog.title,

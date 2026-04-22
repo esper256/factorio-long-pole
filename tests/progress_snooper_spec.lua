@@ -243,8 +243,8 @@ describe("progress_snooper", function()
       }
     }))
 
-    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-plate"))
-    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "copper-cable"))
+    assert.are.equal(-4, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-plate"))
+    assert.are.equal(-6, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "copper-cable"))
 
     assert.is_true(progress_snooper.dispatch(state, "on_player_crafted_item", {
       player_index = 1,
@@ -255,6 +255,9 @@ describe("progress_snooper", function()
     }))
 
     assert.are.equal(2, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "electronic-circuit"))
+    assert.is_true(progress_tracker_store.clamp_all_loose_stock_to_non_negative(state))
+    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-plate"))
+    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "copper-cable"))
 
     _G.game = previous_game
   end)

@@ -3,6 +3,10 @@ local build_requirements = require("build_requirements")
 
 local M = {}
 
+-- Split tracker owns the editable plan state plus a few runtime-only helpers
+-- like requirement caches and current-split timing. The UI talks to this module
+-- so persistence and progress logic do not have to know about widget details.
+
 local function ensure_requirement_cache(state)
   state.split_requirement_cache = state.split_requirement_cache or {
     by_split_id = {}
@@ -15,6 +19,8 @@ local function invalidate_split_requirement_cache(state, split)
     return
   end
 
+  -- Requirement trees are pure functions of split content. Bumping a revision
+  -- number gives us cheap invalidation without diffing every nested table edit.
   split.requirement_revision = (split.requirement_revision or 0) + 1
   ensure_requirement_cache(state).by_split_id[split.id] = nil
 end
@@ -100,6 +106,8 @@ local function normalize_technology_entries(technologies)
 end
 
 local function normalize_split(split, fallback_name)
+  -- Keep imports from older drafts readable by normalizing legacy field names
+  -- and always materializing the collections the editor expects.
   split.name = split.name or fallback_name or "Untitled Split"
   split.items = copy_entries(split.items)
   split.blueprints = copy_entries(split.blueprints)
@@ -500,6 +508,8 @@ function M.move_split(state, from_index, to_index)
   local split = table.remove(state.splits, from_index)
   table.insert(state.splits, to_index, split)
 
+  -- Current progress and per-player editor selection are logical properties of
+  -- a split, not of its transient list position, so move those pointers with it.
   if state.current_split_index == from_index then
     state.current_split_index = to_index
   elseif from_index < state.current_split_index and to_index >= state.current_split_index then
@@ -685,6 +695,8 @@ function M.get_split_status(state, force_name)
     })
   end
 
+  -- Reserve current-split claims before computing next-split readiness so the
+  -- viewer answers "what is actually left over if I advance right now?"
   for index, split in ipairs(state.splits) do
     local status = {
       index = index,

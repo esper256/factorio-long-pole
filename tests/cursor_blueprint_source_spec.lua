@@ -23,10 +23,6 @@ describe("cursor_blueprint_source", function()
       return spec.entities or {}
     end
 
-    function stack.export_stack()
-      return spec.export_string
-    end
-
     return stack
   end
 
@@ -43,10 +39,6 @@ describe("cursor_blueprint_source", function()
 
     function record.get_selected_record(_player)
       return spec.selected_record
-    end
-
-    function record.export_record()
-      return spec.export_string
     end
 
     function record.get_blueprint_entity_count()
@@ -85,8 +77,7 @@ describe("cursor_blueprint_source", function()
   it("resolves the selected blueprint from a cursor_record blueprint book", function()
     local selected_record = make_record({
       type = "blueprint",
-      is_setup = true,
-      export_string = "record-blueprint"
+      is_setup = true
     })
     local player = {
       cursor_record = make_record({
@@ -109,8 +100,7 @@ describe("cursor_blueprint_source", function()
   it("resolves the selected blueprint from a cursor_stack blueprint book", function()
     local blueprint_stack = make_stack({
       is_blueprint = true,
-      entity_count = 2,
-      export_string = "stack-blueprint"
+      entity_count = 2
     })
     local player = {
       cursor_stack = make_stack({
@@ -139,8 +129,7 @@ describe("cursor_blueprint_source", function()
       },
       blueprint_to_setup = make_stack({
         is_blueprint = true,
-        entity_count = 1,
-        export_string = "setup-blueprint"
+        entity_count = 1
       })
     }
 
@@ -148,7 +137,7 @@ describe("cursor_blueprint_source", function()
 
     assert.is_nil(error_message)
     assert.are.equal("blueprint_to_setup", resolved.carrier)
-    assert.are.equal("setup-blueprint", resolved.source.export_stack())
+    assert.are.equal(1, resolved.source.get_blueprint_entity_count())
   end)
 
   it("reports missing selected blueprints in books consistently", function()

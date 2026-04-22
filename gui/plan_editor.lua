@@ -1,5 +1,6 @@
-local blueprint_snapshot = require("blueprint_snapshot")
-local blueprint_library = require("blueprint_library")
+local blueprint_entity_summary = require("util.blueprint_entity_summary")
+local blueprint_fingerprint = require("util.blueprint_fingerprint")
+local blueprint_library = require("util.blueprint_library")
 local build_requirements = require("build_requirements")
 local item_quantity_dialog = require("gui.item_quantity_dialog")
 local plan_storage = require("plan_storage")
@@ -67,6 +68,10 @@ local SPLIT_ROW_ACTION_ROW_NAME = "long_pole_split_action_row"
 local SPLIT_ROW_DETAIL_ROW_NAME = "long_pole_split_detail_row"
 local SPLIT_ROW_FIELDS_NAME = "long_pole_split_fields"
 local SPLIT_ROW_NOTES_DRAWER_NAME = "long_pole_split_notes_drawer"
+
+-- This editor is intentionally dense. Most of the refresh logic below exists to
+-- keep text focus and scroll positions stable while still letting the rest of
+-- the row rebuild aggressively when the underlying split changes.
 
 local function safe_index(root, key)
   if root == nil then
@@ -195,6 +200,8 @@ local function report_raw_cost_error(player, state, split, error_message)
   local player_errors = state.editor_raw_cost_errors[player.index] or {}
   state.editor_raw_cost_errors[player.index] = player_errors
 
+  -- Raw-cost failures can happen on every refresh tick after an edit. Only print
+  -- a new message when the error actually changes so the player chat log stays usable.
   if player_errors[split_id] ~= error_message then
     player_errors[split_id] = error_message
     player.print(error_message)
@@ -448,25 +455,34 @@ local function get_held_blueprint(player)
   end
 
   local source = resolved.source
-  local export_string = source.export_record and source.export_record() or source.export_stack()
   local entities = source.get_blueprint_entities and source.get_blueprint_entities() or {}
   local entity_count = source.get_blueprint_entity_count and source.get_blueprint_entity_count() or 0
-  local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
+  local provisional_symlink = {
+    library_root = resolved.library_root or "player-blueprints",
+    inside_books = resolved.inside_books or nil,
+    blueprint_slot = resolved.source_book_active_index
+  }
   local blueprint_name = safe_index(source, "label")
-
   if not blueprint_name or blueprint_name == "" then
-    if resolved.carrier == "cursor_record" then
-      blueprint_name = blueprint_snapshot.resolve_name_from_export(export_string, "Unnamed Blueprint")
-    else
-      blueprint_name = "Unnamed Blueprint"
-    end
+    blueprint_name = "Unnamed Blueprint"
+  end
+
+  provisional_symlink.blueprint_name = blueprint_name
+  local extracted_fingerprint = blueprint_fingerprint.extract_blueprint_fingerprint({
+    name = blueprint_name,
+    entity_summary = blueprint_entity_summary.summarize_entities(entities),
+    entity_count = entity_count
+  }, provisional_symlink)
+  local library_match = blueprint_library.find_blueprint_symlink_by_fingerprint(player, extracted_fingerprint, game)
+  if (not safe_index(source, "label") or safe_index(source, "label") == "") and library_match and library_match.blueprint_name and library_match.blueprint_name ~= "" then
+    blueprint_name = library_match.blueprint_name
   end
 
   return {
     name = blueprint_name,
-    export_string = export_string,
     entity_count = entity_count,
-    entity_summary = blueprint_snapshot.summarize_entities(entities),
+    entity_summary = extracted_fingerprint.entity_summary,
+    blueprint_fingerprint = extracted_fingerprint.blueprint_fingerprint,
     library_root = library_match and library_match.library_root or "player-blueprints",
     inside_books = library_match and library_match.inside_books or nil,
     blueprint_slot = library_match and library_match.blueprint_slot or resolved.source_book_active_index,
@@ -1095,6 +1111,8 @@ local function split_list_needs_rebuild(split_list, state)
 
   for index, split in ipairs(state.splits) do
     local row = split_list.children[index]
+    -- A split-id mismatch means rows were reordered or replaced. Rebuilding is
+    -- cheaper than trying to surgically retag a now-wrong widget tree.
     if not row or not row.valid or not row.tags or row.tags.split_id ~= split.id then
       return true
     end
@@ -1206,6 +1224,8 @@ local function sync_split_row(outer, state, split_index, split, total_splits, ro
     notes_button.tooltip = split.notes ~= "" and "Show or hide notes for this split." or "Add notes for this split."
   end
 
+  -- Rebuild the dense planning panels every refresh, but keep the outer row and
+  -- text widgets alive so typing in names/notes does not constantly lose focus.
   destroy_children(fields)
   add_blueprint_sources(fields, split)
   add_extra_items_panel(fields, split)
@@ -1215,6 +1235,8 @@ local function sync_split_row(outer, state, split_index, split, total_splits, ro
 end
 
 local function sync_split_list(player, state, split_list, row_width)
+  -- Picker options are rebuilt from the visible split rows so stale technology
+  -- indices never survive a reorder or deletion.
   state.editor_research_picker_options[player.index] = {}
 
   if split_list_needs_rebuild(split_list, state) then

@@ -6,6 +6,10 @@ local tracker = require("split_tracker")
 
 local M = {}
 
+-- The split viewer is small enough to rebuild each refresh, which keeps the
+-- runtime UI honest without having to maintain a second, more brittle diffing
+-- system alongside the editor's in-place sync logic.
+
 M.root_name = "long_pole_split_viewer"
 M.open_editor_button_name = "long_pole_open_plan_editor"
 M.advance_split_button_name = "long_pole_advance_split"
@@ -68,6 +72,8 @@ local function sort_icon_entries(entries, sort_mode)
     sorted[index] = entry
   end
 
+  -- Different viewer sections answer different questions, so the sort mode is
+  -- chosen per group: "what is most blocked?" versus "what still has the most left?".
   table.sort(sorted, function(a, b)
     if sort_mode == "remaining" then
       local count_a = a.count or 0
@@ -328,6 +334,8 @@ function M.refresh(player, state)
   end
 
   if is_debug_popup_visible(state, player.index) then
+    -- The debug popup hangs off the same snapshot as the main viewer so review
+    -- sessions can inspect exactly what the planner believes right now.
     progress_debug_popup.add(frame, tracker.get_current_split_progress_snapshot(state, force_name))
   end
 

@@ -1,7 +1,7 @@
-local blueprint_library = require("blueprint_library")
+local blueprint_library = require("util.blueprint_library")
 
 describe("blueprint_library", function()
-  local function blueprint(export_string, label)
+  local function blueprint(entity_summary, label)
     local record = {
       valid = true,
       type = "blueprint",
@@ -12,8 +12,20 @@ describe("blueprint_library", function()
       return true
     end
 
-    function record:export_record()
-      return export_string
+    function record:get_blueprint_entities()
+      local entities = {}
+      local entity_number = 1
+      for _, entry in ipairs(entity_summary or {}) do
+        for _ = 1, entry.count do
+          entities[#entities + 1] = {
+            entity_number = entity_number,
+            name = entry.name,
+            position = {x = entity_number, y = 0}
+          }
+          entity_number = entity_number + 1
+        end
+      end
+      return entities
     end
 
     return record
@@ -48,16 +60,21 @@ describe("blueprint_library", function()
   it("finds a blueprint directly in the player library root", function()
     local player = {
       blueprints = {
-        [7] = blueprint("target", "Direct Blueprint")
+        [7] = blueprint({{name = "transport-belt", count = 12}, {name = "inserter", count = 4}}, "Direct Blueprint")
       }
     }
 
-    local match = blueprint_library.find_blueprint_path_by_export(player, "target")
+    local match = blueprint_library.find_blueprint_symlink_by_fingerprint(player, {
+      blueprint_fingerprint = "transport-belt:12;inserter:4",
+      library_root = "player-blueprints"
+    })
 
     assert.same({
+      blueprint_name = "Direct Blueprint",
       library_root = "player-blueprints",
       inside_books = {},
-      blueprint_slot = 7
+      blueprint_slot = 7,
+      match_fraction = 1.0
     }, match)
   end)
 
@@ -66,21 +83,28 @@ describe("blueprint_library", function()
       blueprints = {
         [1] = blueprint_book("Any% Openers", {
           [3] = blueprint_book("Burner Starts", {
-            [2] = blueprint("target", "Starter burner pair")
+            [2] = blueprint({{name = "burner-mining-drill", count = 2}, {name = "stone-furnace", count = 2}}, "Starter burner pair")
           })
         }),
         [2] = blueprint_book("Other", {
-          [1] = blueprint("target", "Duplicate")
+          [1] = blueprint({{name = "burner-mining-drill", count = 2}, {name = "stone-furnace", count = 2}}, "Duplicate")
         })
       }
     }
 
-    local match = blueprint_library.find_blueprint_path_by_export(player, "target")
-
-    assert.same({
+    local match = blueprint_library.find_blueprint_symlink_by_fingerprint(player, {
+      blueprint_fingerprint = "burner-mining-drill:2;stone-furnace:2",
       library_root = "player-blueprints",
       inside_books = {"Any% Openers", "Burner Starts"},
       blueprint_slot = 2
+    })
+
+    assert.same({
+      blueprint_name = "Starter burner pair",
+      library_root = "player-blueprints",
+      inside_books = {"Any% Openers", "Burner Starts"},
+      blueprint_slot = 2,
+      match_fraction = 1.0
     }, match)
   end)
 
@@ -91,17 +115,24 @@ describe("blueprint_library", function()
     local game_script = {
       blueprints = {
         [4] = blueprint_book("Shared", {
-          [6] = blueprint("target", "Shared Blueprint")
+          [6] = blueprint({{name = "transport-belt", count = 12}, {name = "inserter", count = 4}}, "Shared Blueprint")
         })
       }
     }
 
-    local match = blueprint_library.find_blueprint_path_by_export(player, "target", game_script)
-
-    assert.same({
+    local match = blueprint_library.find_blueprint_symlink_by_fingerprint(player, {
+      blueprint_fingerprint = "transport-belt:12;inserter:4",
       library_root = "game-blueprints",
       inside_books = {"Shared"},
       blueprint_slot = 6
+    }, game_script)
+
+    assert.same({
+      blueprint_name = "Shared Blueprint",
+      library_root = "game-blueprints",
+      inside_books = {"Shared"},
+      blueprint_slot = 6,
+      match_fraction = 1.0
     }, match)
   end)
 
@@ -109,17 +140,24 @@ describe("blueprint_library", function()
     local player = {
       blueprints = {
         [1] = unlabeled_blueprint_book({
-          [4] = blueprint("target", "Nested Blueprint")
+          [4] = blueprint({{name = "transport-belt", count = 12}, {name = "inserter", count = 4}}, "Nested Blueprint")
         })
       }
     }
 
-    local match = blueprint_library.find_blueprint_path_by_export(player, "target")
+    local match = blueprint_library.find_blueprint_symlink_by_fingerprint(player, {
+      blueprint_fingerprint = "transport-belt:12;inserter:4",
+      library_root = "player-blueprints",
+      inside_books = {"Missing"},
+      blueprint_slot = 4
+    })
 
     assert.same({
+      blueprint_name = "Nested Blueprint",
       library_root = "player-blueprints",
       inside_books = {},
-      blueprint_slot = 4
+      blueprint_slot = 4,
+      match_fraction = 1.0
     }, match)
   end)
 

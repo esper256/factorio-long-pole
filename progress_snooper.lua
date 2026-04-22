@@ -5,6 +5,10 @@ local production_statistics_snooper = require("progress_snoopers.production_stat
 
 local M = {}
 
+-- This registry turns the individual snoopers into a small event bus so
+-- control.lua only has to dispatch named events instead of knowing each
+-- tracking concern directly.
+
 local SNOOPERS = {
   hand_crafting_snooper,
   player_mined_entity_snooper,
@@ -59,6 +63,8 @@ end
 local function collect_subscribed_event_names()
   local event_name_set = {}
 
+  -- Different snoopers can listen to the same event; dedupe here so control.lua
+  -- only needs one script.on_event registration per Factorio event.
   for _, snooper in ipairs(SNOOPERS) do
     for event_name in pairs(snooper.subscriptions or {}) do
       event_name_set[event_name] = true

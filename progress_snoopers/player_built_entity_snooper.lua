@@ -29,6 +29,8 @@ function M.on_built_entity(state, event)
     return false
   end
 
+  -- Placed entities leave loose stock and become build-progress claims for the
+  -- active split, so both ledgers have to move together here.
   local consumed_loose_stock = stock_adjuster.adjust_from_inventory(state, force_name, surface_name, event and event.consumed_items or nil, -1)
   local tracked_placed_entity = progress_tracker_store.upsert_placed_entity(state, {
     unit_number = entity.unit_number,
@@ -56,6 +58,8 @@ function M.on_robot_built_entity(state, event)
     return false
   end
 
+  -- Robot build events only expose the placed stack directly, not a consumed
+  -- inventory snapshot, so handle that path separately from manual building.
   local consumed_loose_stock = stock_adjuster.adjust_from_item_stack(state, force_name, surface_name, event and event.stack or nil, -1)
   local tracked_placed_entity = progress_tracker_store.upsert_placed_entity(state, {
     unit_number = entity.unit_number,

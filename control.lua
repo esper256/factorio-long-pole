@@ -2,11 +2,14 @@ local split_viewer = require("gui.split_viewer")
 local plan_editor = require("gui.plan_editor")
 local plan_storage = require("plan_storage")
 local progress_snooper = require("progress_snooper")
+local progress_tracker_store = require("progress_tracker_store")
 local tracker = require("split_tracker")
 local starting_loose_stock = require("util.starting_loose_stock")
 
 local runtime_flags = {}
 do
+  -- Test-only runtime flags let the GUI smoke test drive one-shot flows without
+  -- baking harness behavior into the normal mod runtime.
   local ok, loaded_flags = pcall(require, "test_support.runtime_flags")
   if ok and type(loaded_flags) == "table" then
     runtime_flags = loaded_flags
@@ -112,6 +115,8 @@ local function clear_pending_auto_import(player_index)
 end
 
 local function schedule_auto_import_for_player(player_index, tick)
+  -- Player creation fires before every blueprint library path is always ready,
+  -- so we retry for a short window instead of assuming a single attempt is enough.
   storage.pending_auto_import_by_player[player_index] = (tick or 0) + AUTO_IMPORT_RETRY_WINDOW_TICKS
 end
 
@@ -191,6 +196,7 @@ end)
 script.on_nth_tick(30, function()
   process_pending_auto_imports(game.tick)
   progress_snooper.poll(storage, game)
+  progress_tracker_store.clamp_all_loose_stock_to_non_negative(storage)
   -- The split viewer is live progress UI; the editor should only rebuild after editor actions.
   refresh_all_players(false)
 end)
@@ -288,6 +294,8 @@ end)
 for _, event_name in ipairs(progress_snooper.subscribed_event_names()) do
   local event_id = PROGRESS_SNOOPER_EVENT_IDS[event_name]
   if event_id then
+    -- Keep control.lua ignorant of individual snooper details so event coverage
+    -- stays declarative in the snooper modules themselves.
     script.on_event(event_id, function(event)
       progress_snooper.dispatch(storage, event_name, event)
     end)

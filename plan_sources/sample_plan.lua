@@ -1,6 +1,8 @@
 local M = {}
 
 function M.load()
+  -- Sample content is intentionally tiny and readable; it exists to exercise the
+  -- plan shape in development, not to define the mod's canonical starter route.
   return {
     {
       name = "Starter Burners",

@@ -15,6 +15,8 @@ local function exclude_resource_mining_from_production_stats(state, force_name, 
     return false
   end
 
+  -- Resource mining increases production statistics even though we already see
+  -- the exact mined stacks here. Exclude those deltas so polling does not add them twice.
   local handled = false
   for index = 1, #inventory do
     local stack = inventory[index]

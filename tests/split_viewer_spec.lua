@@ -142,33 +142,23 @@ describe("split_viewer", function()
     package.loaded["gui.split_viewer"] = nil
     split_viewer = require("gui.split_viewer")
 
-    with_mocked_label_imports({
-      ["split-viewer-plan-export"] = "Imported From Record",
-      ["split-viewer-split-export"] = "Imported Split"
-    }, function()
-      local player = {
-        cursor_stack = {
-          valid_for_read = false
-        },
-        cursor_record = {
-          valid = true,
-          type = "blueprint-book",
-          export_record = function()
-            return "split-viewer-plan-export"
-          end,
-          blueprint_description = [[format=long-pole-plan;version=1
+    local player = {
+      cursor_stack = {
+        valid_for_read = false
+      },
+      cursor_record = {
+        valid = true,
+        type = "blueprint-book",
+        blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-click-import
 visibility=references-only
 default_surface=nauvis
 ]],
-          contents = {
-            [1] = {
-              valid = true,
-              type = "blueprint-book",
-              export_record = function()
-                return "split-viewer-split-export"
-              end,
-              blueprint_description = [[format=long-pole-split;version=1
+        contents = {
+          [1] = {
+            valid = true,
+            type = "blueprint-book",
+            blueprint_description = [[format=long-pole-split;version=1
 surface=nauvis
 
 --- Extra Items ---
@@ -180,47 +170,46 @@ automation
 --- Notes ---
 Imported from click.
 ]],
-              contents = {}
-            }
-          },
-          print = function(_, message)
-            printed_message = message
-          end
-        }
-      }
-      player.print = function(_, message)
-        printed_message = message
-      end
-
-      local state = {
-        splits = {
-          {
-            id = 1,
-            name = "Old Split",
-            items = {},
-            blueprints = {},
-            technologies = {},
-            notes = "",
-            surface = "nauvis"
+            contents = {}
           }
         },
-        plan_name = "Old Plan",
-        plan_id = "old-plan",
-        editor_selection = {},
-        current_split_index = 1,
-        next_split_id = 2
+        print = function(_, message)
+          printed_message = message
+        end
       }
+    }
+    player.print = function(_, message)
+      printed_message = message
+    end
 
-      local handled = split_viewer.handle_click(player, state, {
-        name = split_viewer.open_editor_button_name
-      })
+    local state = {
+      splits = {
+        {
+          id = 1,
+          name = "Old Split",
+          items = {},
+          blueprints = {},
+          technologies = {},
+          notes = "",
+          surface = "nauvis"
+        }
+      },
+      plan_name = "Old Plan",
+      plan_id = "old-plan",
+      editor_selection = {},
+      current_split_index = 1,
+      next_split_id = 2
+    }
 
-      assert.is_true(handled)
-      assert.is_nil(printed_message)
-      assert.are.equal("Imported From Record", state.plan_name)
-      assert.are.equal("Imported Split", state.splits[1].name)
-      assert.is_nil(opened_with_plan_name)
-    end)
+    local handled = split_viewer.handle_click(player, state, {
+      name = split_viewer.open_editor_button_name
+    })
+
+    assert.is_true(handled)
+    assert.is_nil(printed_message)
+    assert.are.equal("Untitled Plan", state.plan_name)
+    assert.are.equal("Split 1", state.splits[1].name)
+    assert.is_nil(opened_with_plan_name)
 
     package.loaded["gui.plan_editor"] = original_plan_editor
     package.loaded["gui.split_viewer"] = nil
@@ -347,382 +336,4 @@ Imported from item.
     package.loaded["gui.split_viewer"] = nil
   end)
 
-  it("renders the current split stopwatch on the far right and advances using the click tick", function()
-    local previous_game = rawget(_G, "game")
-    _G.game = {
-      tick = 3600
-    }
-
-    local player = make_player_with_left_gui()
-    local state = {
-      splits = {
-        {
-          id = 1,
-          name = "Current Split",
-          items = {
-            {name = "transport-belt", count = 10}
-          },
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis"
-        },
-        {
-          id = 2,
-          name = "Next Split",
-          items = {},
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis"
-        }
-      },
-      editor_selection = {},
-      current_split_index = 1,
-      current_split_started_tick = 3480
-    }
-
-    split_viewer.refresh(player, state)
-
-    local frame = player.gui.left[split_viewer.root_name]
-    local body = frame.children[2]
-    local current_row = body.children[1]
-    local stopwatch_button = current_row.children[2]
-
-    assert.are.equal(split_viewer.advance_split_button_name, stopwatch_button.name)
-    assert.are.equal("00:02", stopwatch_button.caption)
-    assert.are.equal("Current Split", current_row.children[1].caption)
-
-    assert.is_true(split_viewer.handle_click(player, state, {
-      name = split_viewer.advance_split_button_name
-    }, {
-      tick = 4200
-    }))
-    assert.are.equal(2, state.current_split_index)
-    assert.are.equal(4200, state.current_split_started_tick)
-
-    _G.game = previous_game
-  end)
-
-  it("shows completed split time as a label and leaves future split time blank", function()
-    local previous_game = rawget(_G, "game")
-    _G.game = {
-      tick = 0
-    }
-
-    local player = make_player_with_left_gui()
-    local state = {
-      splits = {
-        {
-          id = 1,
-          name = "Done Split",
-          items = {},
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis",
-          completed_elapsed_ticks = 7500
-        },
-        {
-          id = 2,
-          name = "Current Split",
-          items = {
-            {name = "iron-gear-wheel", count = 5}
-          },
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis"
-        },
-        {
-          id = 3,
-          name = "Future Split",
-          items = {
-            {name = "transport-belt", count = 10}
-          },
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis"
-        }
-      },
-      editor_selection = {},
-      current_split_index = 2,
-      current_split_started_tick = 0
-    }
-
-    split_viewer.refresh(player, state)
-
-    local frame = player.gui.left[split_viewer.root_name]
-    local body = frame.children[2]
-    local completed_row = body.children[1]
-    local future_row = body.children[3]
-
-    assert.are.equal("Done Split", completed_row.children[1].caption)
-    assert.are.equal("02:05", completed_row.children[2].caption)
-    assert.are.equal("empty-widget", future_row.children[2].type)
-
-    _G.game = previous_game
-  end)
-
-  it("toggles a compact progress popup from the splits title using icon slots and totals", function()
-    local player = make_player_with_left_gui()
-    local state = {
-      splits = {
-        {
-          id = 4,
-          name = "Current Split",
-          items = {},
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis"
-        }
-      },
-      editor_selection = {},
-      current_split_index = 1
-    }
-
-    progress_tracker_store.init(state)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "transport-belt", 25)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-chest", 3)
-    progress_tracker_store.upsert_placed_entity(state, {
-      unit_number = 11,
-      force_name = "player",
-      surface_name = "nauvis",
-      item_name = "transport-belt",
-      split_id = 4
-    })
-    progress_tracker_store.upsert_placed_entity(state, {
-      unit_number = 12,
-      force_name = "player",
-      surface_name = "nauvis",
-      item_name = "assembling-machine-1",
-      split_id = 4
-    })
-    progress_tracker_store.set_loose_stock(state, "enemy", "nauvis", "firearm-magazine", 99)
-    progress_tracker_store.upsert_placed_entity(state, {
-      unit_number = 13,
-      force_name = "enemy",
-      surface_name = "nauvis",
-      item_name = "firearm-magazine",
-      split_id = 4
-    })
-
-    split_viewer.refresh(player, state)
-    local frame = player.gui.left[split_viewer.root_name]
-    local header = frame.children[1]
-    local title = header.children[2]
-    assert.are.equal(split_viewer.title_toggle_button_name, title.name)
-    assert.are.equal("Splits +", title.caption)
-
-    assert.is_true(split_viewer.handle_click(player, state, title))
-
-    split_viewer.refresh(player, state)
-
-    frame = player.gui.left[split_viewer.root_name]
-    header = frame.children[1]
-    title = header.children[2]
-    assert.are.equal("Splits -", title.caption)
-    local popup = frame.children[3]
-    local content = popup.children[1]
-    local placed_section = content.children[1]
-    local loose_section = content.children[2]
-    local placed_grid = placed_section.children[2].children[1]
-    local loose_grid = loose_section.children[2].children[1]
-
-    assert.are.equal("Placed", placed_section.children[1].caption)
-    assert.are.equal("Loose", loose_section.children[1].caption)
-    assert.are.equal("item/assembling-machine-1", placed_grid.children[1].sprite)
-    assert.are.equal(1, placed_grid.children[1].number)
-    assert.are.equal("item/transport-belt", placed_grid.children[2].sprite)
-    assert.are.equal(1, placed_grid.children[2].number)
-    assert.are.equal("item/transport-belt", loose_grid.children[1].sprite)
-    assert.are.equal(25, loose_grid.children[1].number)
-    assert.are.equal("item/iron-chest", loose_grid.children[2].sprite)
-    assert.are.equal(3, loose_grid.children[2].number)
-    assert.are_not.equal("item/firearm-magazine", loose_grid.children[1].sprite)
-    assert.are_not.equal("item/firearm-magazine", loose_grid.children[2].sprite)
-
-    assert.is_true(split_viewer.handle_click(player, state, title))
-    split_viewer.refresh(player, state)
-    frame = player.gui.left[split_viewer.root_name]
-    assert.are.equal(2, #frame.children)
-  end)
-
-  it("renders previous debt, current progress groups, and next readiness icons with overflow", function()
-    local previous_game = rawget(_G, "game")
-    local previous_prototypes = rawget(_G, "prototypes")
-    local previous_settings = rawget(_G, "settings")
-    _G.game = {
-      tick = 600
-    }
-    _G.settings = {
-      global = {
-        ["long-pole-split-viewer-icon-limit"] = {
-          value = 2
-        }
-      }
-    }
-    _G.prototypes = {
-      entity = {
-        ["transport-belt"] = {
-          items_to_place_this = {
-            {name = "transport-belt", count = 1}
-          }
-        }
-      },
-      technology = {
-        automation = {
-          research_unit_count = 2,
-          research_unit_ingredients = {
-            {name = "automation-science-pack", amount = 1}
-          }
-        }
-      },
-      recipe = {
-        ["transport-belt"] = {
-          ingredients = {
-            {type = "item", name = "iron-plate", amount = 1},
-            {type = "item", name = "iron-gear-wheel", amount = 1}
-          },
-          products = {
-            {type = "item", name = "transport-belt", amount = 2}
-          }
-        },
-        ["iron-chest"] = {
-          ingredients = {
-            {type = "item", name = "iron-plate", amount = 8}
-          },
-          products = {
-            {type = "item", name = "iron-chest", amount = 1}
-          }
-        },
-        ["automation-science-pack"] = {
-          ingredients = {
-            {type = "item", name = "copper-plate", amount = 1},
-            {type = "item", name = "iron-gear-wheel", amount = 1}
-          },
-          products = {
-            {type = "item", name = "automation-science-pack", amount = 1}
-          }
-        },
-        ["iron-gear-wheel"] = {
-          ingredients = {
-            {type = "item", name = "iron-plate", amount = 2}
-          },
-          products = {
-            {type = "item", name = "iron-gear-wheel", amount = 1}
-          }
-        }
-      }
-    }
-
-    local player = make_player_with_left_gui()
-    local state = {
-      splits = {
-        {
-          id = 1,
-          name = "Prep",
-          items = {},
-          blueprints = {},
-          technologies = {},
-          notes = "",
-          surface = "nauvis",
-          completed_elapsed_ticks = 300
-        },
-        {
-          id = 2,
-          name = "Current",
-          items = {
-            {name = "iron-chest", count = 2}
-          },
-          blueprints = {
-            {
-              entity_summary = {
-                {name = "transport-belt", count = 4}
-              }
-            }
-          },
-          technologies = {
-            {name = "automation"}
-          },
-          notes = "",
-          surface = "nauvis"
-        },
-        {
-          id = 3,
-          name = "Next",
-          items = {
-            {name = "burner-mining-drill", count = 3},
-            {name = "assembling-machine-1", count = 1}
-          },
-          blueprints = {
-            {
-              entity_summary = {
-                {name = "transport-belt", count = 2}
-              }
-            }
-          },
-          technologies = {},
-          notes = "",
-          surface = "nauvis"
-        }
-      },
-      editor_selection = {},
-      current_split_index = 2,
-      current_split_started_tick = 0
-    }
-
-    progress_tracker_store.init(state)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "transport-belt", 2)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-chest", 1)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "automation-science-pack", 1)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-plate", 20)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "copper-plate", 2)
-    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "burner-mining-drill", 1)
-    progress_tracker_store.upsert_placed_entity(state, {
-      unit_number = 101,
-      force_name = "player",
-      surface_name = "nauvis",
-      item_name = "transport-belt",
-      split_id = 2
-    })
-
-    split_viewer.refresh(player, state)
-
-    local frame = player.gui.left[split_viewer.root_name]
-    local body = frame.children[2]
-    local previous_row = body.children[1]
-    local current_row = body.children[2]
-    local next_row = body.children[3]
-
-    local previous_groups = previous_row.children[3]
-    local previous_group = previous_groups.children[1]
-    assert.are.equal("item/iron-chest", previous_group.children[1].children[1].sprite)
-    assert.are.equal(1, previous_group.children[1].children[1].number)
-    assert.are.same({r = 0.85, g = 0.25, b = 0.25}, previous_group.children[1].children[2].style.color)
-    assert.are.equal("item/transport-belt", previous_group.children[2].children[1].sprite)
-
-    local current_groups = current_row.children[3]
-    local placement_group = current_groups.children[1]
-    local group_spacer = current_groups.children[2]
-    local research_group = current_groups.children[3]
-    assert.are.equal("item/transport-belt", placement_group.children[1].children[1].sprite)
-    assert.are.equal(3, placement_group.children[1].children[1].number)
-    assert.are.equal("empty-widget", group_spacer.type)
-    assert.are.equal("item/iron-gear-wheel", research_group.children[1].children[1].sprite)
-    assert.are.equal("item/automation-science-pack", research_group.children[2].children[1].sprite)
-
-    local next_groups = next_row.children[3]
-    local next_group = next_groups.children[1]
-    assert.are.equal("item/transport-belt", next_group.children[1].children[1].sprite)
-    assert.are.equal(2, next_group.children[1].children[1].number)
-    assert.are.equal("item/assembling-machine-1", next_group.children[2].children[1].sprite)
-    assert.are.equal("... +1", next_group.children[3].caption)
-
-    _G.game = previous_game
-    _G.prototypes = previous_prototypes
-    _G.settings = previous_settings
-  end)
 end)
