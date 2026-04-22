@@ -68,6 +68,21 @@ local SPLIT_ROW_DETAIL_ROW_NAME = "long_pole_split_detail_row"
 local SPLIT_ROW_FIELDS_NAME = "long_pole_split_fields"
 local SPLIT_ROW_NOTES_DRAWER_NAME = "long_pole_split_notes_drawer"
 
+local function safe_index(root, key)
+  if root == nil then
+    return nil
+  end
+
+  local ok, value = pcall(function()
+    return root[key]
+  end)
+  if ok then
+    return value
+  end
+
+  return nil
+end
+
 local function destroy_children(element)
   for _, child in pairs(element.children) do
     child.destroy()
@@ -437,7 +452,7 @@ local function get_held_blueprint(player)
   local entities = source.get_blueprint_entities and source.get_blueprint_entities() or {}
   local entity_count = source.get_blueprint_entity_count and source.get_blueprint_entity_count() or 0
   local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
-  local blueprint_name = source.label
+  local blueprint_name = safe_index(source, "label")
 
   if not blueprint_name or blueprint_name == "" then
     if resolved.carrier == "cursor_record" then

@@ -296,4 +296,54 @@ describe("plan_editor", function()
     assert.are.equal(split_name_field, name_row[plan_editor.name_field_name])
     assert.is_not_nil(split_row[SPLIT_ROW_NOTES_DRAWER_NAME])
   end)
+
+  it("adds a held cursor record blueprint without reading label directly", function()
+    local state = make_state()
+    local printed_messages = {}
+    local player = {
+      index = 1,
+      print = function(message)
+        printed_messages[#printed_messages + 1] = message
+      end,
+      gui = {
+        screen = {}
+      }
+    }
+
+    package.loaded["util.cursor_blueprint_source"].resolve_selected_blueprint = function()
+      return {
+        carrier = "cursor_record",
+        source = {
+          export_record = function()
+            return "record-blueprint-export"
+          end,
+          get_blueprint_entities = function()
+            return {
+              {name = "transport-belt"}
+            }
+          end,
+          get_blueprint_entity_count = function()
+            return 1
+          end
+        },
+        source_book_label = "Openers",
+        source_book_active_index = 2
+      }, nil
+    end
+
+    local result = plan_editor.handle_click(player, state, {
+      name = plan_editor.add_blueprint_button_name,
+      tags = {
+        split_id = state.splits[1].id
+      }
+    })
+
+    assert.are.equal("refresh-split-viewer", result)
+    assert.are.equal(0, #printed_messages)
+    assert.are.equal(1, #state.splits[1].blueprints)
+    assert.are.equal("Unnamed Blueprint", state.splits[1].blueprints[1].name)
+    assert.are.equal("record-blueprint-export", state.splits[1].blueprints[1].export_string)
+    assert.are.equal("Openers", state.splits[1].blueprints[1].source_book_label)
+    assert.are.equal(2, state.splits[1].blueprints[1].source_book_active_index)
+  end)
 end)
