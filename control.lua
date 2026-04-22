@@ -47,6 +47,25 @@ local function refresh_player(player)
   refresh_plan_editor_for_player(player)
 end
 
+local function handle_plan_editor_refresh_result(player, result)
+  if result == "refresh-split-viewer" then
+    refresh_split_viewer_for_player(player)
+    return true
+  end
+
+  if result == "refresh-plan-editor" then
+    refresh_plan_editor_for_player(player)
+    return true
+  end
+
+  if result == "refresh-both" then
+    refresh_player(player)
+    return true
+  end
+
+  return false
+end
+
 local function refresh_all_players(refresh_editor)
   for _, player in pairs(game.players) do
     refresh_split_viewer_for_player(player)
@@ -193,17 +212,12 @@ script.on_event(defines.events.on_gui_click, function(event)
   end
 
   local plan_editor_result = plan_editor.handle_click(player, storage, element, event)
-  if plan_editor_result == "refresh-split-viewer" then
-    split_viewer.refresh(player, storage)
-    return
-  end
-
   if plan_editor_result == "handled" then
     return
   end
 
-  if plan_editor_result then
-    refresh_player(player)
+  if handle_plan_editor_refresh_result(player, plan_editor_result) then
+    return
   end
 end)
 
@@ -218,9 +232,7 @@ script.on_event(defines.events.on_gui_text_changed, function(event)
     return
   end
 
-  if plan_editor.handle_text_changed(player, storage, element) then
-    split_viewer.refresh(player, storage)
-  end
+  handle_plan_editor_refresh_result(player, plan_editor.handle_text_changed(player, storage, element))
 end)
 
 script.on_event(defines.events.on_gui_elem_changed, function(event)
@@ -270,9 +282,7 @@ script.on_event(defines.events.on_gui_confirmed, function(event)
     return
   end
 
-  if plan_editor_result then
-    refresh_player(player)
-  end
+  handle_plan_editor_refresh_result(player, plan_editor_result)
 end)
 
 for _, event_name in ipairs(progress_snooper.subscribed_event_names()) do

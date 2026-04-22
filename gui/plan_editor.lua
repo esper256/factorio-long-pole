@@ -55,6 +55,19 @@ M.name_field_name = "long_pole_split_name"
 M.notes_field_name = "long_pole_split_notes"
 M.toggle_notes_button_name = "long_pole_toggle_notes"
 
+local TITLEBAR_NAME = "long_pole_plan_editor_titlebar"
+local CONTENT_NAME = "long_pole_plan_editor_content"
+local SHARED_HEADER_NAME = "long_pole_plan_editor_headers"
+local EMPTY_SPLIT_LIST_NAME = "long_pole_split_list_empty"
+local SPLIT_ROW_NAME_PREFIX = "long_pole_split_row_"
+local SPLIT_ROW_BODY_NAME = "long_pole_split_row_body"
+local SPLIT_ROW_NAME_ROW_NAME = "long_pole_split_name_row"
+local SPLIT_ROW_INDEX_LABEL_NAME = "long_pole_split_index"
+local SPLIT_ROW_ACTION_ROW_NAME = "long_pole_split_action_row"
+local SPLIT_ROW_DETAIL_ROW_NAME = "long_pole_split_detail_row"
+local SPLIT_ROW_FIELDS_NAME = "long_pole_split_fields"
+local SPLIT_ROW_NOTES_DRAWER_NAME = "long_pole_split_notes_drawer"
+
 local function destroy_children(element)
   for _, child in pairs(element.children) do
     child.destroy()
@@ -226,6 +239,14 @@ local function effective_plan_name(name)
   return trimmed
 end
 
+local function display_plan_name(name)
+  if name == nil then
+    return "Untitled Plan"
+  end
+
+  return name
+end
+
 local function build_extra_item_entries(split)
   local entries = {}
   for item_index, item in ipairs(split.items or {}) do
@@ -289,7 +310,10 @@ end
 local function ensure_window(player)
   local frame = player.gui.screen[M.root_name]
   if frame then
-    return frame
+    local width, height = compute_window_dimensions(player)
+    frame.style.width = width
+    frame.style.height = height
+    return frame, width
   end
 
   frame = player.gui.screen.add({
@@ -303,7 +327,11 @@ local function ensure_window(player)
   frame.style.width = width
   frame.style.height = height
 
-  return frame
+  return frame, width
+end
+
+local function split_row_element_name(split_id)
+  return SPLIT_ROW_NAME_PREFIX .. tostring(split_id)
 end
 
 local function technology_display_name(prototype, technology_name)
@@ -764,6 +792,7 @@ end
 local function add_notes_drawer(parent, split)
   local drawer = parent.add({
     type = "flow",
+    name = SPLIT_ROW_NOTES_DRAWER_NAME,
     direction = "vertical"
   })
   drawer.style.horizontally_stretchable = true
@@ -784,6 +813,7 @@ end
 local function add_shared_column_headers(parent, row_width)
   local header_row = parent.add({
     type = "flow",
+    name = SHARED_HEADER_NAME,
     direction = "horizontal"
   })
   header_row.style.horizontally_stretchable = true
@@ -802,20 +832,10 @@ local function add_shared_column_headers(parent, row_width)
   add_header_label(header_row, "Planning Totals", TOTAL_PANEL_MIN_WIDTH, true)
 end
 
-local function add_split_row(parent, state, split_index, split, total_splits, row_width)
-  local outer = parent.add({
-    type = "frame",
-    direction = "vertical",
-    tags = {split_id = split.id}
-  })
-  outer.style.horizontally_stretchable = true
-  if row_width then
-    outer.style.width = row_width
-  end
-  outer.style.top_margin = 8
-
+local function build_split_row_contents(outer, state, split_index, split, total_splits)
   local row = outer.add({
     type = "flow",
+    name = SPLIT_ROW_BODY_NAME,
     direction = "horizontal",
     tags = {split_id = split.id}
   })
@@ -831,6 +851,7 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
 
   local name_row = controls.add({
     type = "flow",
+    name = SPLIT_ROW_NAME_ROW_NAME,
     direction = "horizontal"
   })
   name_row.style.horizontally_stretchable = true
@@ -838,6 +859,7 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
 
   local row_label = name_row.add({
     type = "label",
+    name = SPLIT_ROW_INDEX_LABEL_NAME,
     caption = "#" .. split_index
   })
   row_label.style = "grey_label"
@@ -855,6 +877,7 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
 
   local action_row = controls.add({
     type = "flow",
+    name = SPLIT_ROW_ACTION_ROW_NAME,
     direction = "horizontal"
   })
   action_row.style.top_margin = 6
@@ -891,6 +914,7 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
 
   local detail_row = controls.add({
     type = "flow",
+    name = SPLIT_ROW_DETAIL_ROW_NAME,
     direction = "horizontal"
   })
   detail_row.style.top_margin = 6
@@ -920,6 +944,7 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
 
   local fields = row.add({
     type = "flow",
+    name = SPLIT_ROW_FIELDS_NAME,
     direction = "horizontal"
   })
   fields.style.horizontally_stretchable = true
@@ -935,6 +960,314 @@ local function add_split_row(parent, state, split_index, split, total_splits, ro
   if split.notes ~= "" or split.notes_expanded then
     add_notes_drawer(outer, split)
   end
+end
+
+local function add_split_row(parent, state, split_index, split, total_splits, row_width)
+  local outer = parent.add({
+    type = "frame",
+    name = split_row_element_name(split.id),
+    direction = "vertical",
+    tags = {split_id = split.id}
+  })
+  outer.style.horizontally_stretchable = true
+  if row_width then
+    outer.style.width = row_width
+  end
+  outer.style.top_margin = 8
+
+  build_split_row_contents(outer, state, split_index, split, total_splits)
+  return outer
+end
+
+local function ensure_layout(frame, state, window_width)
+  local titlebar = frame[TITLEBAR_NAME]
+  local content = frame[CONTENT_NAME]
+  local split_list = content and content[M.split_list_name] or nil
+  local plan_name_field = titlebar and titlebar[M.plan_name_field_name] or nil
+
+  if titlebar and content and split_list and plan_name_field then
+    return titlebar, content, split_list
+  end
+
+  destroy_children(frame)
+
+  titlebar = frame.add({
+    type = "flow",
+    name = TITLEBAR_NAME,
+    direction = "horizontal"
+  })
+  titlebar.drag_target = frame
+  titlebar.style.horizontally_stretchable = true
+  titlebar.style.vertical_align = "center"
+  titlebar.style.horizontal_spacing = 8
+
+  plan_name_field = titlebar.add({
+    type = "textfield",
+    name = M.plan_name_field_name,
+    text = display_plan_name(state.plan_name)
+  })
+  plan_name_field.style.minimal_width = TITLE_FIELD_MIN_WIDTH
+  plan_name_field.style.maximal_width = TITLE_FIELD_MAX_WIDTH
+  plan_name_field.style.width = math.min(TITLE_FIELD_MAX_WIDTH, math.max(TITLE_FIELD_MIN_WIDTH, window_width - 520))
+  plan_name_field.style.height = 28
+  plan_name_field.style.left_margin = 8
+  plan_name_field.tags = {plan_name = true}
+  plan_name_field.tooltip = "Edit the plan name."
+
+  local spacer = titlebar.add({ type = "empty-widget" })
+  spacer.style.horizontally_stretchable = true
+  spacer.style.height = 24
+  spacer.drag_target = frame
+  spacer.ignored_by_interaction = true
+
+  titlebar.add({
+    type = "button",
+    name = M.add_split_button_name,
+    caption = "Add Split"
+  })
+
+  titlebar.add({
+    type = "button",
+    name = M.save_plan_button_name,
+    caption = "Save to New Book"
+  })
+
+  titlebar.add({
+    type = "sprite-button",
+    name = M.close_button_name,
+    sprite = "utility/close",
+    hovered_sprite = "utility/close_black",
+    clicked_sprite = "utility/close_black",
+    style = "frame_action_button"
+  })
+
+  content = frame.add({
+    type = "flow",
+    name = CONTENT_NAME,
+    direction = "vertical"
+  })
+  content.style.horizontally_stretchable = true
+  content.style.vertically_stretchable = true
+  content.style.top_margin = 6
+
+  local split_row_width = math.max(MIN_SPLIT_ROW_WIDTH, window_width - 72)
+  add_shared_column_headers(content, split_row_width)
+
+  split_list = content.add({
+    type = "scroll-pane",
+    name = M.split_list_name,
+    vertical_scroll_policy = "auto"
+  })
+  split_list.style.vertically_stretchable = true
+  split_list.style.horizontally_stretchable = true
+  split_list.style.top_margin = 6
+
+  return titlebar, content, split_list
+end
+
+local function split_list_needs_rebuild(split_list, state)
+  if #state.splits == 0 then
+    return #split_list.children ~= 1 or split_list[EMPTY_SPLIT_LIST_NAME] == nil
+  end
+
+  if split_list[EMPTY_SPLIT_LIST_NAME] ~= nil then
+    return true
+  end
+
+  if #split_list.children ~= #state.splits then
+    return true
+  end
+
+  for index, split in ipairs(state.splits) do
+    local row = split_list.children[index]
+    if not row or not row.valid or not row.tags or row.tags.split_id ~= split.id then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function find_split_row(split_list, split_id)
+  for _, child in ipairs(split_list.children or {}) do
+    if child.valid and child.tags and child.tags.split_id == split_id then
+      return child
+    end
+  end
+
+  return nil
+end
+
+local function sync_notes_drawer(outer, split)
+  local drawer = outer[SPLIT_ROW_NOTES_DRAWER_NAME]
+  local should_show = split.notes ~= "" or split.notes_expanded
+
+  if not should_show then
+    if drawer then
+      drawer.destroy()
+    end
+    return
+  end
+
+  if not drawer then
+    add_notes_drawer(outer, split)
+    return
+  end
+
+  local notes_field = drawer[M.notes_field_name]
+  if notes_field then
+    notes_field.tags = {split_id = split.id}
+    if notes_field.text ~= split.notes then
+      notes_field.text = split.notes
+    end
+  end
+end
+
+local function sync_split_row(outer, state, split_index, split, total_splits, row_width)
+  outer.tags = {split_id = split.id}
+  outer.style.horizontally_stretchable = true
+  outer.style.top_margin = 8
+  if row_width then
+    outer.style.width = row_width
+  end
+
+  local row = outer[SPLIT_ROW_BODY_NAME]
+  local controls = row and row.controls or nil
+  local name_row = controls and controls[SPLIT_ROW_NAME_ROW_NAME] or nil
+  local action_row = controls and controls[SPLIT_ROW_ACTION_ROW_NAME] or nil
+  local detail_row = controls and controls[SPLIT_ROW_DETAIL_ROW_NAME] or nil
+  local fields = row and row[SPLIT_ROW_FIELDS_NAME] or nil
+
+  if not (row and controls and name_row and action_row and detail_row and fields) then
+    destroy_children(outer)
+    build_split_row_contents(outer, state, split_index, split, total_splits)
+    return
+  end
+
+  row.tags = {split_id = split.id}
+
+  local row_label = name_row[SPLIT_ROW_INDEX_LABEL_NAME]
+  if row_label then
+    row_label.caption = "#" .. split_index
+  end
+
+  local name_field = name_row[M.name_field_name]
+  if name_field then
+    name_field.tags = {split_id = split.id}
+    if name_field.text ~= split.name then
+      name_field.text = split.name
+    end
+  end
+
+  local up_button = action_row[M.move_split_up_name]
+  if up_button then
+    up_button.tags = {split_id = split.id}
+    up_button.enabled = split_index > 1
+  end
+
+  local down_button = action_row[M.move_split_down_name]
+  if down_button then
+    down_button.tags = {split_id = split.id}
+    down_button.enabled = split_index < total_splits
+  end
+
+  local delete_button = action_row[M.delete_split_button_name]
+  if delete_button then
+    delete_button.tags = {split_id = split.id}
+  end
+
+  split.surface = normalize_split_surface(split)
+  local surface_button = detail_row[M.cycle_split_surface_name]
+  if surface_button then
+    surface_button.tags = {split_id = split.id}
+    surface_button.sprite = surface_sprite_path(split.surface)
+    surface_button.tooltip = {"", "Surface: ", format_surface_caption(split.surface)}
+    surface_button.enabled = #available_surfaces() > 1
+  end
+
+  local notes_button = detail_row[M.toggle_notes_button_name]
+  if notes_button then
+    notes_button.tags = {split_id = split.id}
+    notes_button.tooltip = split.notes ~= "" and "Show or hide notes for this split." or "Add notes for this split."
+  end
+
+  destroy_children(fields)
+  add_blueprint_sources(fields, split)
+  add_extra_items_panel(fields, split)
+  add_research_panel(fields, state, split)
+  add_total_panel(fields, state, split)
+  sync_notes_drawer(outer, split)
+end
+
+local function sync_split_list(player, state, split_list, row_width)
+  state.editor_research_picker_options[player.index] = {}
+
+  if split_list_needs_rebuild(split_list, state) then
+    destroy_children(split_list)
+
+    if #state.splits == 0 then
+      local empty_state = split_list.add({
+        type = "label",
+        name = EMPTY_SPLIT_LIST_NAME,
+        caption = "No splits yet. Click Add Split to start building this run."
+      })
+      empty_state.style.single_line = false
+      empty_state.style.font_color = {0.8, 0.8, 0.8}
+      empty_state.style.top_margin = 12
+      return
+    end
+
+    for index, split in ipairs(state.splits) do
+      split.notes_expanded = state.editor_notes_expanded[split.id] or false
+      add_split_row(split_list, state, index, split, #state.splits, row_width)
+    end
+    return
+  end
+
+  if #state.splits == 0 then
+    return
+  end
+
+  for index, split in ipairs(state.splits) do
+    split.notes_expanded = state.editor_notes_expanded[split.id] or false
+    local outer = split_list.children[index]
+    if not outer or not outer.valid then
+      return
+    end
+    sync_split_row(outer, state, index, split, #state.splits, row_width)
+  end
+end
+
+local function refresh_split_row_by_id(player, state, split_id)
+  local frame = player.gui.screen[M.root_name]
+  if not frame then
+    return false
+  end
+
+  local content = frame[CONTENT_NAME]
+  local split_list = content and content[M.split_list_name] or nil
+  local split, split_index = tracker.get_split_by_id(state, split_id)
+  if not (split_list and split and split_index) then
+    return false
+  end
+
+  local outer = find_split_row(split_list, split_id)
+  if not outer then
+    return false
+  end
+
+  split.notes_expanded = state.editor_notes_expanded[split.id] or false
+  local _, window_width = ensure_window(player)
+  local header_row = content[SHARED_HEADER_NAME]
+  local split_row_width = math.max(MIN_SPLIT_ROW_WIDTH, window_width - 72)
+  if header_row then
+    header_row.style.width = split_row_width
+  end
+  local player_picker_options = state.editor_research_picker_options[player.index] or {}
+  state.editor_research_picker_options[player.index] = player_picker_options
+  player_picker_options[split.id] = nil
+  sync_split_row(outer, state, split_index, split, #state.splits, split_row_width)
+  return true
 end
 
 function M.open(player, state)
@@ -959,106 +1292,51 @@ function M.close(player, state)
 end
 
 function M.refresh(player, state)
-  local frame = player.gui.screen[M.root_name]
-  if not frame then
+  local existing_frame = player.gui.screen[M.root_name]
+  if not existing_frame then
     return
   end
 
+  local frame, window_width = ensure_window(player)
+
   ensure_editor_state(state)
-  destroy_children(frame)
-  state.editor_research_picker_options[player.index] = {}
-  local window_width = compute_window_dimensions(player)
-
-  local titlebar = frame.add({
-    type = "flow",
-    direction = "horizontal"
-  })
-  titlebar.drag_target = frame
-  titlebar.style.horizontally_stretchable = true
-  titlebar.style.vertical_align = "center"
-  titlebar.style.horizontal_spacing = 8
-
-  local plan_name_field = titlebar.add({
-    type = "textfield",
-    name = M.plan_name_field_name,
-    text = effective_plan_name(state.plan_name)
-  })
-  plan_name_field.style.minimal_width = TITLE_FIELD_MIN_WIDTH
-  plan_name_field.style.maximal_width = TITLE_FIELD_MAX_WIDTH
-  plan_name_field.style.width = math.min(TITLE_FIELD_MAX_WIDTH, math.max(TITLE_FIELD_MIN_WIDTH, window_width - 520))
-  plan_name_field.style.height = 28
-  plan_name_field.style.left_margin = 8
-  plan_name_field.tags = {plan_name = true}
-  plan_name_field.tooltip = "Edit the plan name."
-
-  local spacer = titlebar.add({ type = "empty-widget" })
-  spacer.style.horizontally_stretchable = true
-  spacer.style.height = 24
-  spacer.drag_target = frame
-  spacer.ignored_by_interaction = true
-
-  local add_split_button = titlebar.add({
-    type = "button",
-    name = M.add_split_button_name,
-    caption = "Add Split"
-  })
-
-  local save_plan_button = titlebar.add({
-    type = "button",
-    name = M.save_plan_button_name,
-    caption = "Save to New Book"
-  })
-
-  titlebar.add({
-    type = "sprite-button",
-    name = M.close_button_name,
-    sprite = "utility/close",
-    hovered_sprite = "utility/close_black",
-    clicked_sprite = "utility/close_black",
-    style = "frame_action_button"
-  })
-
-  local content = frame.add({
-    type = "flow",
-    direction = "vertical"
-  })
-  content.style.horizontally_stretchable = true
-  content.style.vertically_stretchable = true
-  content.style.top_margin = 6
+  local titlebar, content, split_list = ensure_layout(frame, state, window_width)
+  local plan_name_field = titlebar[M.plan_name_field_name]
+  if plan_name_field then
+    local displayed_name = display_plan_name(state.plan_name)
+    if plan_name_field.text ~= displayed_name then
+      plan_name_field.text = displayed_name
+    end
+    plan_name_field.style.width = math.min(TITLE_FIELD_MAX_WIDTH, math.max(TITLE_FIELD_MIN_WIDTH, window_width - 520))
+  end
 
   local split_row_width = math.max(MIN_SPLIT_ROW_WIDTH, window_width - 72)
-  add_shared_column_headers(content, split_row_width)
-
-  local split_list = content.add({
-    type = "scroll-pane",
-    name = M.split_list_name,
-    vertical_scroll_policy = "auto"
-  })
-  split_list.style.vertically_stretchable = true
-  split_list.style.horizontally_stretchable = true
-  split_list.style.top_margin = 6
-
-  if #state.splits == 0 then
-    local empty_state = split_list.add({
-      type = "label",
-      caption = "No splits yet. Click Add Split to start building this run."
-    })
-    empty_state.style.single_line = false
-    empty_state.style.font_color = {0.8, 0.8, 0.8}
-    empty_state.style.top_margin = 12
+  local header_row = content[SHARED_HEADER_NAME]
+  if header_row then
+    header_row.style.width = split_row_width
   end
 
-  for index, split in ipairs(state.splits) do
-    split.notes_expanded = state.editor_notes_expanded[split.id] or false
-    add_split_row(split_list, state, index, split, #state.splits, split_row_width)
+  sync_split_list(player, state, split_list, split_row_width)
+end
+
+local function refresh_split_row_or_editor(player, state, split_id)
+  if split_id and refresh_split_row_by_id(player, state, split_id) then
+    return
   end
+
+  M.refresh(player, state)
 end
 
 function M.handle_click(player, state, element, event)
   local dialog_result = item_quantity_dialog.handle_click(player, state, element)
   if dialog_result then
     if dialog_result.action == "confirm" then
-      return apply_item_dialog_result(state, dialog_result)
+      local applied = apply_item_dialog_result(state, dialog_result)
+      if applied then
+        refresh_split_row_or_editor(player, state, dialog_result.context and dialog_result.context.split_id or nil)
+        return "refresh-split-viewer"
+      end
+      return "handled"
     end
     return "handled"
   end
@@ -1070,12 +1348,13 @@ function M.handle_click(player, state, element, event)
 
   if element.name == "long_pole_open_plan_editor" then
     M.open(player, state)
-    return true
+    return "handled"
   end
 
   if element.name == M.add_split_button_name then
     tracker.add_split(state)
-    return true
+    M.refresh(player, state)
+    return "refresh-split-viewer"
   end
 
   if element.name == M.save_plan_button_name then
@@ -1086,6 +1365,7 @@ function M.handle_click(player, state, element, event)
       return false
     end
 
+    M.refresh(player, state)
     player.print("Saved active Long Pole plan to a new blueprint book in the cursor.")
     return "refresh-split-viewer"
   end
@@ -1098,19 +1378,34 @@ function M.handle_click(player, state, element, event)
     end
 
     if element.name == M.add_blueprint_button_name then
-      return tracker.add_split_blueprint_by_id(state, element.tags.split_id, blueprint)
+      local changed = tracker.add_split_blueprint_by_id(state, element.tags.split_id, blueprint)
+      if changed then
+        refresh_split_row_or_editor(player, state, element.tags.split_id)
+        return "refresh-split-viewer"
+      end
+      return false
     end
 
-    return tracker.replace_split_blueprint_by_id(
+    local changed = tracker.replace_split_blueprint_by_id(
       state,
       element.tags.split_id,
       element.tags.blueprint_index,
       blueprint
     )
+    if changed then
+      refresh_split_row_or_editor(player, state, element.tags.split_id)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.remove_blueprint_button_name then
-    return tracker.remove_split_blueprint_by_id(state, element.tags.split_id, element.tags.blueprint_index)
+    local changed = tracker.remove_split_blueprint_by_id(state, element.tags.split_id, element.tags.blueprint_index)
+    if changed then
+      refresh_split_row_or_editor(player, state, element.tags.split_id)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.delete_split_button_name then
@@ -1123,14 +1418,20 @@ function M.handle_click(player, state, element, event)
       player_errors[split_id] = nil
     end
 
-    return tracker.remove_split_by_id(state, split_id)
+    local changed = tracker.remove_split_by_id(state, split_id)
+    if changed then
+      M.refresh(player, state)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.toggle_notes_button_name then
     ensure_editor_state(state)
     local split_id = element.tags.split_id
     state.editor_notes_expanded[split_id] = not state.editor_notes_expanded[split_id]
-    return true
+    refresh_split_row_or_editor(player, state, split_id)
+    return "handled"
   end
 
   if element.name == M.cycle_split_surface_name then
@@ -1139,12 +1440,26 @@ function M.handle_click(player, state, element, event)
       return false
     end
 
-    return tracker.set_split_surface_by_id(state, element.tags.split_id, next_surface_name(normalize_split_surface(split)))
+    local changed = tracker.set_split_surface_by_id(
+      state,
+      element.tags.split_id,
+      next_surface_name(normalize_split_surface(split))
+    )
+    if changed then
+      refresh_split_row_or_editor(player, state, element.tags.split_id)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if slot_grid.matches_action(element, M.extra_item_cell_button_name) then
     if is_right_click(event) and element.tags.item_index then
-      return tracker.remove_split_item_by_id(state, element.tags.split_id, element.tags.item_index)
+      local changed = tracker.remove_split_item_by_id(state, element.tags.split_id, element.tags.item_index)
+      if changed then
+        refresh_split_row_or_editor(player, state, element.tags.split_id)
+        return "refresh-split-viewer"
+      end
+      return false
     end
 
     open_extra_item_dialog(player, state, element.tags.split_id, element.tags.item_index)
@@ -1156,7 +1471,12 @@ function M.handle_click(player, state, element, event)
       return false
     end
 
-    return tracker.remove_split_technology_by_id(state, element.tags.split_id, element.tags.technology_index)
+    local changed = tracker.remove_split_technology_by_id(state, element.tags.split_id, element.tags.technology_index)
+    if changed then
+      refresh_split_row_or_editor(player, state, element.tags.split_id)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.add_research_button_name then
@@ -1169,7 +1489,12 @@ function M.handle_click(player, state, element, event)
       return false
     end
 
-    return tracker.add_split_technology_by_id(state, element.tags.split_id, {name = technology_name})
+    local changed = tracker.add_split_technology_by_id(state, element.tags.split_id, {name = technology_name})
+    if changed then
+      refresh_split_row_or_editor(player, state, element.tags.split_id)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.move_split_up_name then
@@ -1177,7 +1502,12 @@ function M.handle_click(player, state, element, event)
     if not split_index then
       return false
     end
-    return tracker.move_split(state, split_index, split_index - 1)
+    local changed = tracker.move_split(state, split_index, split_index - 1)
+    if changed then
+      M.refresh(player, state)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.move_split_down_name then
@@ -1185,7 +1515,12 @@ function M.handle_click(player, state, element, event)
     if not split_index then
       return false
     end
-    return tracker.move_split(state, split_index, split_index + 1)
+    local changed = tracker.move_split(state, split_index, split_index + 1)
+    if changed then
+      M.refresh(player, state)
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   return false
@@ -1207,11 +1542,15 @@ function M.handle_text_changed(_player, state, element)
   end
 
   if element.name == M.name_field_name then
-    return tracker.rename_split_by_id(state, split_id, element.text)
+    if tracker.rename_split_by_id(state, split_id, element.text) then
+      return "refresh-split-viewer"
+    end
+    return false
   end
 
   if element.name == M.notes_field_name then
-    return tracker.set_split_notes_by_id(state, split_id, element.text)
+    tracker.set_split_notes_by_id(state, split_id, element.text)
+    return false
   end
 
   return false
@@ -1237,7 +1576,12 @@ function M.handle_confirmed(player, state, element)
   local dialog_result = item_quantity_dialog.handle_confirmed(player, state, element)
   if dialog_result then
     if dialog_result.action == "confirm" then
-      return apply_item_dialog_result(state, dialog_result)
+      local applied = apply_item_dialog_result(state, dialog_result)
+      if applied then
+        refresh_split_row_or_editor(player, state, dialog_result.context and dialog_result.context.split_id or nil)
+        return "refresh-split-viewer"
+      end
+      return "handled"
     end
     return "handled"
   end
