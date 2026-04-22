@@ -7,7 +7,7 @@ describe("progress_tracker_store", function()
     local root = progress_tracker_store.init(state)
 
     assert.is_table(root)
-    assert.are.equal(1, root.storage_version)
+    assert.are.equal(2, root.storage_version)
     assert.is_table(root.forces)
     assert.is_table(root.placed_entity_index)
   end)
@@ -181,5 +181,38 @@ describe("progress_tracker_store", function()
       produced_total = 14,
       consumed_total = 0
     }, snapshot.entries[3])
+  end)
+
+  it("tracks split claims incrementally when entities move or are removed", function()
+    local state = {}
+    progress_tracker_store.init(state)
+
+    assert.is_true(progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 21,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "assembling-machine-1",
+      split_id = 4
+    }))
+
+    local snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis", 4)
+    assert.are.equal(1, snapshot.entries[1].current_split_claim)
+
+    assert.is_true(progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 21,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "assembling-machine-1",
+      split_id = 5
+    }))
+
+    local old_split_snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis", 4)
+    local new_split_snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis", 5)
+    assert.are.equal(0, old_split_snapshot.entries[1].current_split_claim)
+    assert.are.equal(1, new_split_snapshot.entries[1].current_split_claim)
+
+    assert.is_true(progress_tracker_store.remove_placed_entity(state, 21))
+    local removed_snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis", 5)
+    assert.are.equal(0, #removed_snapshot.entries)
   end)
 end)

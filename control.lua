@@ -26,18 +26,33 @@ local PROGRESS_SNOOPER_EVENT_IDS = {
 local AUTO_IMPORT_FIRST_PLAN_SETTING = "long-pole-auto-import-first-plan-on-new-game"
 local AUTO_IMPORT_RETRY_WINDOW_TICKS = 600
 
-local function refresh_player(player)
+local function refresh_split_viewer_for_player(player)
   if not (player and player.valid) then
     return
   end
 
   split_viewer.refresh(player, storage)
+end
+
+local function refresh_plan_editor_for_player(player)
+  if not (player and player.valid) then
+    return
+  end
+
   plan_editor.refresh(player, storage)
 end
 
-local function refresh_all_players()
+local function refresh_player(player)
+  refresh_split_viewer_for_player(player)
+  refresh_plan_editor_for_player(player)
+end
+
+local function refresh_all_players(refresh_editor)
   for _, player in pairs(game.players) do
-    refresh_player(player)
+    refresh_split_viewer_for_player(player)
+    if refresh_editor then
+      refresh_plan_editor_for_player(player)
+    end
   end
 end
 
@@ -52,7 +67,7 @@ end
 
 local function on_runtime_initialized()
   initialize_state()
-  refresh_all_players()
+  refresh_all_players(true)
 end
 
 local function maybe_grant_starting_loose_stock(player)
@@ -151,13 +166,14 @@ script.on_event(defines.events.on_player_joined_game, function(event)
 end)
 
 script.on_event(defines.events.on_player_cursor_stack_changed, function(event)
-  refresh_player(game.get_player(event.player_index))
+  refresh_split_viewer_for_player(game.get_player(event.player_index))
 end)
 
 script.on_nth_tick(30, function()
   process_pending_auto_imports(game.tick)
   progress_snooper.poll(storage, game)
-  refresh_all_players()
+  -- The split viewer is live progress UI; the editor should only rebuild after editor actions.
+  refresh_all_players(false)
 end)
 
 script.on_event(defines.events.on_gui_click, function(event)
@@ -172,7 +188,7 @@ script.on_event(defines.events.on_gui_click, function(event)
   end
 
   if split_viewer.handle_click(player, storage, element, event) then
-    refresh_player(player)
+    refresh_split_viewer_for_player(player)
     return
   end
 

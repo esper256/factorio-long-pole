@@ -1,6 +1,6 @@
 local M = {}
 
-local STORAGE_VERSION = 1
+local STORAGE_VERSION = 2
 local DEFAULT_FORCE_NAME = "player"
 
 local function normalize_force_name(force_name)
@@ -83,6 +83,7 @@ local function ensure_surface(root, force_name, surface_name)
     surface.loose_stock = surface.loose_stock or {}
     surface.placed_counts = surface.placed_counts or {}
     surface.placed_entities = surface.placed_entities or {}
+    surface.placed_counts_by_split_id = surface.placed_counts_by_split_id or {}
     surface.production_totals = surface.production_totals or {}
     surface.production_input_exclusions = surface.production_input_exclusions or {}
     surface.uncertainty = surface.uncertainty or {}
@@ -93,6 +94,7 @@ local function ensure_surface(root, force_name, surface_name)
     loose_stock = {},
     placed_counts = {},
     placed_entities = {},
+    placed_counts_by_split_id = {},
     production_totals = {},
     production_input_exclusions = {},
     uncertainty = {}
@@ -110,13 +112,20 @@ end
 local function change_placed_count(surface, item_name, delta)
   local current = surface.placed_counts[item_name] or 0
   local updated = math.max(0, current + delta)
+  if updated == current then
+    return updated
+  end
   surface.placed_counts[item_name] = updated
   remove_zero_entry(surface.placed_counts, item_name)
+  return updated
 end
 
 local function change_loose_stock(surface, item_name, delta)
   local current = surface.loose_stock[item_name] or 0
   local updated = math.max(0, current + delta)
+  if updated == current then
+    return updated
+  end
   surface.loose_stock[item_name] = updated
   remove_zero_entry(surface.loose_stock, item_name)
   return updated
@@ -150,6 +159,100 @@ local function ensure_production_total(surface, item_name)
   return entry
 end
 
+local function ensure_split_counts(surface, split_id)
+  if split_id == nil then
+    return nil
+  end
+
+  local counts = surface.placed_counts_by_split_id[split_id]
+  if counts then
+    return counts
+  end
+
+  counts = {}
+  surface.placed_counts_by_split_id[split_id] = counts
+  return counts
+end
+
+local function change_split_claim_count(surface, split_id, item_name, delta)
+  if split_id == nil then
+    return 0
+  end
+
+  local counts = ensure_split_counts(surface, split_id)
+  local current = counts[item_name] or 0
+  local updated = math.max(0, current + delta)
+  if updated == current then
+    return updated
+  end
+
+  counts[item_name] = updated
+  remove_zero_entry(counts, item_name)
+  if next(counts) == nil then
+    surface.placed_counts_by_split_id[split_id] = nil
+  end
+  return updated
+end
+
+local function build_snapshot_entries(surface)
+  local entry_by_item = {}
+
+  for item_name, count in pairs(surface.loose_stock) do
+    local produced_total = surface.production_totals[item_name] and surface.production_totals[item_name].produced_total or 0
+    local consumed_total = surface.production_totals[item_name] and surface.production_totals[item_name].consumed_total or 0
+    entry_by_item[item_name] = {
+      item_name = item_name,
+      loose_stock = count,
+      placed_count = surface.placed_counts[item_name] or 0,
+      current_split_claim = 0,
+      produced_total = produced_total,
+      consumed_total = consumed_total
+    }
+  end
+
+  for item_name, count in pairs(surface.placed_counts) do
+    if not entry_by_item[item_name] then
+      local produced_total = surface.production_totals[item_name] and surface.production_totals[item_name].produced_total or 0
+      local consumed_total = surface.production_totals[item_name] and surface.production_totals[item_name].consumed_total or 0
+      entry_by_item[item_name] = {
+        item_name = item_name,
+        loose_stock = surface.loose_stock[item_name] or 0,
+        placed_count = count,
+        current_split_claim = 0,
+        produced_total = produced_total,
+        consumed_total = consumed_total
+      }
+    end
+  end
+
+  for item_name, totals in pairs(surface.production_totals) do
+    if not entry_by_item[item_name] then
+      entry_by_item[item_name] = {
+        item_name = item_name,
+        loose_stock = surface.loose_stock[item_name] or 0,
+        placed_count = surface.placed_counts[item_name] or 0,
+        current_split_claim = 0,
+        produced_total = totals.produced_total or 0,
+        consumed_total = totals.consumed_total or 0
+      }
+    else
+      entry_by_item[item_name].produced_total = totals.produced_total or 0
+      entry_by_item[item_name].consumed_total = totals.consumed_total or 0
+    end
+  end
+
+  local entries = {}
+  for _, entry in pairs(entry_by_item) do
+    entries[#entries + 1] = entry
+  end
+
+  table.sort(entries, function(a, b)
+    return a.item_name < b.item_name
+  end)
+
+  return entries
+end
+
 local function normalize_statistics_count(value)
   local number = tonumber(value) or 0
   if number <= 0 then
@@ -174,7 +277,13 @@ function M.set_loose_stock(state, force_name, surface_name, item_name, count)
     return false
   end
 
-  surface.loose_stock[normalized_item_name] = normalize_non_negative_count(count)
+  local normalized_count = normalize_non_negative_count(count)
+  local current = surface.loose_stock[normalized_item_name] or 0
+  if normalized_count == current then
+    return true
+  end
+
+  surface.loose_stock[normalized_item_name] = normalized_count
   remove_zero_entry(surface.loose_stock, normalized_item_name)
   return true
 end
@@ -217,6 +326,7 @@ function M.upsert_placed_entity(state, entity)
     local old_entity = old_surface and old_surface.placed_entities[unit_number] or nil
     if old_entity then
       change_placed_count(old_surface, old_entity.item_name, -1)
+      change_split_claim_count(old_surface, old_entity.split_id, old_entity.item_name, -1)
       old_surface.placed_entities[unit_number] = nil
     end
   end
@@ -236,6 +346,7 @@ function M.upsert_placed_entity(state, entity)
     surface_name = surface_name
   }
   change_placed_count(surface, item_name, 1)
+  change_split_claim_count(surface, entity.split_id, item_name, 1)
   return true
 end
 
@@ -254,6 +365,7 @@ function M.remove_placed_entity(state, unit_number)
   end
 
   change_placed_count(surface, entity.item_name, -1)
+  change_split_claim_count(surface, entity.split_id, entity.item_name, -1)
   surface.placed_entities[unit_number] = nil
   root.placed_entity_index[unit_number] = nil
   return true
@@ -404,79 +516,14 @@ function M.get_surface_snapshot(state, force_name, surface_name, split_id)
     }
   end
 
-  local entry_by_item = {}
-  for item_name, count in pairs(surface.loose_stock) do
-    local produced_total = surface.production_totals[item_name] and surface.production_totals[item_name].produced_total or 0
-    local consumed_total = surface.production_totals[item_name] and surface.production_totals[item_name].consumed_total or 0
-    entry_by_item[item_name] = {
-      item_name = item_name,
-      loose_stock = count,
-      placed_count = surface.placed_counts[item_name] or 0,
-      current_split_claim = 0,
-      produced_total = produced_total,
-      consumed_total = consumed_total
-    }
-  end
-
-  for item_name, count in pairs(surface.placed_counts) do
-    if not entry_by_item[item_name] then
-      local produced_total = surface.production_totals[item_name] and surface.production_totals[item_name].produced_total or 0
-      local consumed_total = surface.production_totals[item_name] and surface.production_totals[item_name].consumed_total or 0
-      entry_by_item[item_name] = {
-        item_name = item_name,
-        loose_stock = surface.loose_stock[item_name] or 0,
-        placed_count = count,
-        current_split_claim = 0,
-        produced_total = produced_total,
-        consumed_total = consumed_total
-      }
-    end
-  end
-
-  for item_name, totals in pairs(surface.production_totals) do
-    if not entry_by_item[item_name] then
-      entry_by_item[item_name] = {
-        item_name = item_name,
-        loose_stock = surface.loose_stock[item_name] or 0,
-        placed_count = surface.placed_counts[item_name] or 0,
-        current_split_claim = 0,
-        produced_total = totals.produced_total or 0,
-        consumed_total = totals.consumed_total or 0
-      }
-    else
-      entry_by_item[item_name].produced_total = totals.produced_total or 0
-      entry_by_item[item_name].consumed_total = totals.consumed_total or 0
-    end
-  end
-
-  if split_id ~= nil then
-    for _, entity in pairs(surface.placed_entities) do
-      if entity.split_id == split_id then
-        local entry = entry_by_item[entity.item_name]
-        if not entry then
-          entry = {
-            item_name = entity.item_name,
-            loose_stock = surface.loose_stock[entity.item_name] or 0,
-            placed_count = surface.placed_counts[entity.item_name] or 0,
-            current_split_claim = 0,
-            produced_total = surface.production_totals[entity.item_name] and surface.production_totals[entity.item_name].produced_total or 0,
-            consumed_total = surface.production_totals[entity.item_name] and surface.production_totals[entity.item_name].consumed_total or 0
-          }
-          entry_by_item[entity.item_name] = entry
-        end
-        entry.current_split_claim = entry.current_split_claim + 1
-      end
-    end
-  end
-
+  local split_counts = (split_id ~= nil and surface.placed_counts_by_split_id[split_id]) or nil
+  local base_entries = build_snapshot_entries(surface)
   local entries = {}
-  for _, entry in pairs(entry_by_item) do
-    entries[#entries + 1] = copy_item_entry(entry)
+  for index, entry in ipairs(base_entries) do
+    local copied_entry = copy_item_entry(entry)
+    copied_entry.current_split_claim = split_counts and (split_counts[copied_entry.item_name] or 0) or 0
+    entries[index] = copied_entry
   end
-
-  table.sort(entries, function(a, b)
-    return a.item_name < b.item_name
-  end)
 
   return {
     force_name = resolved_force_name,
