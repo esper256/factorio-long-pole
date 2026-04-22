@@ -1,4 +1,49 @@
+local progress_tracker_store = require("progress_tracker_store")
+local build_requirements = require("build_requirements")
+
 local M = {}
+
+local function ensure_requirement_cache(state)
+  state.split_requirement_cache = state.split_requirement_cache or {
+    by_split_id = {}
+  }
+  return state.split_requirement_cache
+end
+
+local function invalidate_split_requirement_cache(state, split)
+  if not split then
+    return
+  end
+
+  split.requirement_revision = (split.requirement_revision or 0) + 1
+  ensure_requirement_cache(state).by_split_id[split.id] = nil
+end
+
+local function cached_root_requirements(state, split, cache_key, options)
+  if not (split and split.id and cache_key) then
+    return build_requirements.build_root_requirements(split, options or {})
+  end
+
+  local cache_root = ensure_requirement_cache(state).by_split_id
+  local split_cache = cache_root[split.id]
+  if not split_cache then
+    split_cache = {}
+    cache_root[split.id] = split_cache
+  end
+
+  local revision = split.requirement_revision or 0
+  local cached = split_cache[cache_key]
+  if cached and cached.revision == revision then
+    return cached.entries
+  end
+
+  local entries = build_requirements.build_root_requirements(split, options or {})
+  split_cache[cache_key] = {
+    revision = revision,
+    entries = entries
+  }
+  return entries
+end
 
 local function ensure_next_split_id(state)
   state.next_split_id = state.next_split_id or 1
@@ -62,6 +107,7 @@ local function normalize_split(split, fallback_name)
   split.notes = split.notes or ""
   split.completed_elapsed_ticks = split.completed_elapsed_ticks or nil
   split.surface = split.surface or split.planet or "nauvis"
+  split.requirement_revision = split.requirement_revision or 0
   split.planet = nil
   return split
 end
@@ -86,6 +132,10 @@ function M.init(state)
   state.current_split_started_tick = state.current_split_started_tick
   state.editor_selection = state.editor_selection or {}
   state.entity_events = state.entity_events or {}
+  state.split_requirement_cache = {
+    by_split_id = {}
+  }
+  progress_tracker_store.init(state)
   ensure_next_split_id(state)
 
   for index, split in ipairs(state.splits) do
@@ -129,7 +179,8 @@ function M.create_split(state, name)
     name = name,
     items = {},
     blueprints = {},
-    technologies = {}
+    technologies = {},
+    requirement_revision = 0
   }, name)
   split.id = take_next_split_id(state)
   return split
@@ -230,6 +281,7 @@ function M.set_split_blueprints(state, split_index, blueprints)
   end
 
   split.blueprints = copy_entries(blueprints)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -249,6 +301,7 @@ function M.add_split_blueprint_by_id(state, split_id, blueprint)
   end
 
   split.blueprints[#split.blueprints + 1] = copy_entries({blueprint})[1]
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -259,6 +312,7 @@ function M.replace_split_blueprint_by_id(state, split_id, blueprint_index, bluep
   end
 
   split.blueprints[blueprint_index] = copy_entries({blueprint})[1]
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -269,6 +323,7 @@ function M.remove_split_blueprint_by_id(state, split_id, blueprint_index)
   end
 
   table.remove(split.blueprints, blueprint_index)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -279,6 +334,7 @@ function M.set_split_items(state, split_index, items)
   end
 
   split.items = copy_entries(items)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -298,6 +354,7 @@ function M.add_split_item_by_id(state, split_id, item)
   end
 
   split.items[#split.items + 1] = normalize_item_entry(item)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -309,10 +366,12 @@ function M.replace_split_item_by_id(state, split_id, item_index, item)
 
   if not item or not item.name or item.name == "" then
     table.remove(split.items, item_index)
+    invalidate_split_requirement_cache(state, split)
     return true
   end
 
   split.items[item_index] = normalize_item_entry(item)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -324,11 +383,13 @@ function M.set_split_item_name_by_id(state, split_id, item_index, item_name)
 
   if not item_name or item_name == "" then
     table.remove(split.items, item_index)
+    invalidate_split_requirement_cache(state, split)
     return true
   end
 
   split.items[item_index].name = item_name
   split.items[item_index].count = math.max(1, math.floor(tonumber(split.items[item_index].count) or 1))
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -339,6 +400,7 @@ function M.set_split_item_count_by_id(state, split_id, item_index, count)
   end
 
   split.items[item_index].count = math.max(1, math.floor(tonumber(count) or 1))
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -349,6 +411,7 @@ function M.remove_split_item_by_id(state, split_id, item_index)
   end
 
   table.remove(split.items, item_index)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -359,6 +422,7 @@ function M.set_split_technologies(state, split_index, technologies)
   end
 
   split.technologies = normalize_technology_entries(technologies)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -389,6 +453,7 @@ function M.add_split_technology_by_id(state, split_id, technology)
   end
 
   split.technologies[#split.technologies + 1] = entry
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -399,6 +464,7 @@ function M.remove_split_technology_by_id(state, split_id, technology_index)
   end
 
   table.remove(split.technologies, technology_index)
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -409,6 +475,7 @@ function M.set_split_surface(state, split_index, surface_name)
   end
 
   split.surface = surface_name
+  invalidate_split_requirement_cache(state, split)
   return true
 end
 
@@ -456,11 +523,13 @@ function M.move_split(state, from_index, to_index)
 end
 
 function M.remove_split(state, split_index)
-  if not state.splits[split_index] then
+  local removed_split = state.splits[split_index]
+  if not removed_split then
     return false
   end
 
   table.remove(state.splits, split_index)
+  ensure_requirement_cache(state).by_split_id[removed_split.id] = nil
 
   local split_count = #state.splits
 
@@ -507,29 +576,38 @@ function M.on_entity_changed(state, event)
   }
 end
 
-local function summarize_requirements(split)
-  local missing = {}
-  for _, item in ipairs(split.items) do
-    if item.name and item.name ~= "" then
-      missing[#missing + 1] = {
-        name = item.name,
-        count = item.count or 0,
-        predicted_seconds = math.max(15, (item.count or 0) * 5)
-      }
-    end
+function M.get_split_progress_snapshot(state, split_index, force_name)
+  local split = state.splits[split_index]
+  if not split then
+    return {
+      force_name = force_name,
+      surface_name = nil,
+      entries = {},
+      uncertainty = {}
+    }
   end
 
-  table.sort(missing, function(a, b)
-    if a.predicted_seconds == b.predicted_seconds then
-      return a.name < b.name
-    end
-    return a.predicted_seconds > b.predicted_seconds
-  end)
-
-  return missing
+  return progress_tracker_store.get_surface_snapshot(state, force_name, split.surface, split.id)
 end
 
-function M.get_split_status(state)
+function M.get_current_split_progress_snapshot(state, force_name)
+  return M.get_split_progress_snapshot(state, state.current_split_index, force_name)
+end
+
+local function icon_group(entries, options)
+  if not entries or #entries == 0 then
+    return nil
+  end
+
+  return {
+    entries = entries,
+    tone = options and options.tone or "normal",
+    sort_mode = options and options.sort_mode or "progress",
+    kind = options and options.kind or "requirements"
+  }
+end
+
+function M.get_split_status(state, force_name)
   clamp_current_index(state)
 
   local statuses = {
@@ -539,20 +617,124 @@ function M.get_split_status(state)
   }
 
   local current_index = state.current_split_index
+  local current_split = state.splits[current_index]
+  local current_snapshot = nil
+  local current_missing = {}
+  local current_error_message = nil
+  local current_reserved_pools = nil
+  local current_stock_debt = {}
+  local current_placement_progress = {}
+  local current_research_progress = {}
+  local next_split_readiness = {}
+
+  if current_split then
+    current_snapshot = force_name and M.get_split_progress_snapshot(state, current_index, force_name) or nil
+    current_missing, current_error_message, current_reserved_pools = build_requirements.summarize_missing_requirements(
+      current_split,
+      current_snapshot,
+      {
+        root_requirements = cached_root_requirements(state, current_split, "all-requirements")
+      }
+    )
+    current_stock_debt = build_requirements.summarize_direct_requirement_progress(current_split, current_snapshot, {
+      root_requirements = cached_root_requirements(state, current_split, "stock-debt", {
+        include_technologies = false
+      }),
+      include_technologies = false
+    })
+    current_placement_progress = build_requirements.summarize_direct_requirement_progress(current_split, current_snapshot, {
+      root_requirements = cached_root_requirements(state, current_split, "placement-progress", {
+        include_items = false,
+        include_technologies = false,
+        blueprint_satisfaction_mode = "placed_only"
+      }),
+      include_items = false,
+      include_technologies = false,
+      blueprint_satisfaction_mode = "placed_only"
+    })
+    current_research_progress = build_requirements.summarize_missing_requirements(current_split, current_snapshot, {
+      root_requirements = cached_root_requirements(state, current_split, "research-progress", {
+        include_blueprints = false,
+        include_items = false
+      }),
+      include_blueprints = false,
+      include_items = false
+    })
+  end
+
+  local next_split = state.splits[current_index + 1]
+  if next_split then
+    local next_snapshot = nil
+    local next_initial_pools = nil
+
+    if force_name and current_split and next_split.surface == current_split.surface then
+      next_snapshot = current_snapshot
+      next_initial_pools = current_reserved_pools
+    elseif force_name then
+      next_snapshot = M.get_split_progress_snapshot(state, current_index + 1, force_name)
+    end
+
+    next_split_readiness = build_requirements.summarize_direct_requirement_progress(next_split, next_snapshot, {
+      root_requirements = cached_root_requirements(state, next_split, "next-readiness", {
+        include_technologies = false,
+        blueprint_satisfaction_mode = "loose_only"
+      }),
+      include_technologies = false,
+      blueprint_satisfaction_mode = "loose_only",
+      initial_pools = next_initial_pools
+    })
+  end
+
   for index, split in ipairs(state.splits) do
     local status = {
       index = index,
       name = split.name,
-      missing = summarize_requirements(split),
+      missing = index == current_index and current_missing or {},
+      missing_error = index == current_index and current_error_message or nil,
       is_current = index == current_index,
-      is_ready_to_complete = #split.items == 0 and #split.blueprints == 0 and #split.technologies == 0,
-      completed_elapsed_ticks = split.completed_elapsed_ticks
+      is_ready_to_complete = index == current_index and current_error_message == nil and #current_missing == 0,
+      completed_elapsed_ticks = split.completed_elapsed_ticks,
+      icon_groups = {}
     }
 
     if index == current_index - 1 then
+      local group = icon_group(current_stock_debt, {
+        tone = "alert",
+        sort_mode = "progress",
+        kind = "carry-over-stock"
+      })
+      if group then
+        status.icon_groups[#status.icon_groups + 1] = group
+      end
       statuses.previous = status
     elseif index == current_index then
+      local placement_group = icon_group(current_placement_progress, {
+        tone = "normal",
+        sort_mode = "remaining",
+        kind = "placement-progress"
+      })
+      local research_group = icon_group(current_research_progress, {
+        tone = "normal",
+        sort_mode = "progress",
+        kind = "research-production"
+      })
+      if placement_group then
+        status.icon_groups[#status.icon_groups + 1] = placement_group
+      end
+      if research_group then
+        status.icon_groups[#status.icon_groups + 1] = research_group
+      end
       statuses.current = status
+    elseif index == current_index + 1 then
+      local group = icon_group(next_split_readiness, {
+        tone = "normal",
+        sort_mode = "progress",
+        kind = "next-split-readiness"
+      })
+      if group then
+        status.icon_groups[#status.icon_groups + 1] = group
+      end
+      statuses.upcoming[#statuses.upcoming + 1] = status
     elseif index > current_index then
       statuses.upcoming[#statuses.upcoming + 1] = status
     end

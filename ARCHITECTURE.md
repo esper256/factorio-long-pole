@@ -19,7 +19,7 @@ Example: if the mod indicates **gear wheel assembly** is the long pole, the play
 
 ## Core design philosophy
 
-The mod maintains an internal tally of what the player has access to by registering for Factorio events that indicate items are:
+The mod maintains an internal tally of what the player has access to by combining Factorio events and engine-maintained statistics to understand when items are:
 
 - created
 - consumed
@@ -34,11 +34,19 @@ This tally must account for items located across multiple places, including:
 
 The internal tally is compared against the current split’s requirements to determine what is still missing. Combined with recent production rates, the mod estimates which requirement is most likely to be the long pole.
 
+Split requirements are intentionally divided into different completion semantics:
+
+- Blueprint entities are **placement goals**. A split is not done until those entities have been placed in the world.
+- Extra items are **stock goals**. They only need to exist in loose stock so the player can move on with enough materials.
+- Research entries are **completion goals**. The technology must actually be finished before the split is done.
+
+The split after the current one gets a separate readiness view. It should answer: "if the player advanced right now, is there enough loose stock left over to place the next split's expected entities and supply its extra stock targets?" That next-split readiness signal must stay visually distinct from the current split's build-completion signal.
+
 ## Major mod components
 
-The mod is split into two primary parts:
+The mod has three primary components.
 
-### 1) Split viewer (in-game display)
+### 1) Split progress visualizer and predictor
 
 An in-game display in the **upper-left** corner showing a vertical stack of rows representing splits the player cares about.
 
@@ -51,10 +59,11 @@ Default behavior (configurable via settings):
 Each split should have the following columns:
 - The name of the split (Power plant, On-patch burners, etc)
 - The elapsed time compared to previous best timing on the split -3:02 would mean 3 minutes 2 seconds faster than previous record, +1:06 would mean one minute and six seconds slower than fastest attempt at the split
-- A truncated list of items that need to be produced for the split to be complete sorted by how long they are predicted to take before completing. This list should include two virtual items (lab research production as well as entities placed as a heuristic for player bluprint build speed)
+- For the current split, a truncated list of the missing items and intermediates sorted by how long they are predicted to take before the split is complete. Blueprint-backed items in this list represent **entities that still need to be placed**, while research-backed items represent **science and research still needed to finish the split**.
+- For the next split, a separate readiness view showing whether enough loose stock exists to place the next split's required entities and satisfy its extra stock targets after reserving what the current split still needs.
 - On the current split only an extra column that is a button for completing the split and advancing to the next one. This one should turn green once the mod predicts all intended production, build and research objectives have been completed.
 
-### 2) Plan editor (speedrun plan editor)
+### 2) Run plan editor
 
 A large popup window (nearly full screen) for editing the list of splits.
 
@@ -63,14 +72,20 @@ The plan editor must be treated as a **dense information workspace**, not a spac
 Each split includes:
 
 - a name
-- a list of blueprints the player intends to build
-- a list of additional items (beyond what the blueprints include)
-- a list of technologies to research before proceeding to the next split
+- a list of blueprints whose entities must be placed before the split is considered complete
+- a list of additional stock items that should be available before moving on, but do not need to be placed
+- a list of technologies that must be completed before proceeding to the next split
 
 The editor also surfaces supporting information to help with planning decisions, such as:
 
 - the raw resource cost of every entity combined in each blueprint
 - the total entity count of each blueprint
+
+The editor should label these columns using their completion semantics, not just their data type. A good default vocabulary is:
+
+- `Constructed Blueprints`: entities from these blueprints must be placed in the world
+- `Extra Stock`: these items only need to exist in loose stock
+- `Completed Research`: these technologies must be finished
 
 ### Plan editor layout principles
 
@@ -166,7 +181,6 @@ Preferred fuzzy signals:
 
 - entity-count multiset
 - tile-count summary
-- item-cost summary
 - preview icons if available
 - bounding-box dimensions if they help
 
@@ -195,6 +209,27 @@ That means:
 - players can continue refining their real library blueprints over time
 - the plan can usually pick up those changes later through refresh
 - edge cases will still exist, but they become visible resolution problems instead of silent data corruption
+
+### 3) Event-snooping progress tracker
+
+This component watches Factorio events and statistics and maintains the runtime state used by the split visualizer and predictor.
+
+- Use per-surface force item production statistics for automated production deltas.
+- Use craft, build, mine, and destroy events for hand crafting, placed entities, mined returns, and explicit losses.
+- Maintain per-surface ledgers for production totals, manual-crafted totals, loose stock estimates, placed entities, and uncertainty state.
+- Track placed entities separately from loose stock. They count toward build progress, but they are not next-split loose surplus unless mined back.
+- Stay event-first in normal play. Do not rely on recurring reconciliation scans.
+- If exact loose-stock accounting becomes impossible after destruction, mark the surface uncertain instead of inventing certainty.
+- The first debug surface should be a hover popup on `Splits` showing item icon, placed count, loose stock estimate, and uncertainty status.
+
+#### Known loose-stock limitations
+
+- Destroyed container contents are not perfectly observable. `on_entity_died` tells us that an entity died, but it does not provide a full "all items that vanished from that entity's inventories" payload, so chest and machine contents can force the tracker into an uncertain state.
+- Item production statistics are totals, not stock snapshots. `LuaForce.get_item_production_statistics(surface)` and `LuaFlowStatistics` tell us lifetime production and consumption for a surface, but they do not say where items are now or why they disappeared.
+- There is no general event for arbitrary machine, chest, belt, or inserter inventory changes. Player inventories have dedicated events, but ordinary entity inventories do not, so the tracker cannot learn about every loose-stock change from one universal hook.
+- Script or mod actions can bypass the player-style lifecycle. Script destruction is only visible when code raises `script_raised_destroy`, and `LuaEntity.destroy()` does not raise it unless requested. Script mining can also drop or destroy results depending on how it is called.
+- Mapping a placed entity back to an item is not always unique. `LuaEntityPrototype.items_to_place_this` can contain multiple items, and the docs note that construction bots choose the first item in the list, so some prototypes are inherently ambiguous if different placeable items create the same entity.
+- Any intentionally untracked carrier will be a known source of drift. The tracker can read many inventories and transport lines, but if a storage location is outside the first supported set, the mod should document it as unsupported instead of pretending the estimate is exact.
 
 ## Persistent plan storage and cross-save transfer
 

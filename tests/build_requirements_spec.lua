@@ -950,4 +950,267 @@ describe("build_requirements", function()
     assert.is_truthy(error_message)
     assert.is_truthy(error_message:match("entity:mystery%-marker"))
   end)
+
+  it("computes remaining intermediates after reserving completed split outputs first", function()
+    local summary = build_requirements.summarize_missing_requirements({
+      surface = "nauvis",
+      blueprints = {
+        {
+          entity_summary = {
+            {name = "transport-belt", count = 6}
+          }
+        }
+      },
+      items = {}
+    }, {
+      entries = {
+        {
+          item_name = "transport-belt",
+          loose_stock = 2,
+          current_split_claim = 2
+        },
+        {
+          item_name = "iron-plate",
+          loose_stock = 1,
+          current_split_claim = 0
+        }
+      }
+    }, {
+      resolve_entity_components = function(entity_name)
+        return {
+          {kind = "item", name = entity_name, count = 1}
+        }
+      end,
+      resolve_recipe_set = function(_kind, name)
+        local recipes = {
+          ["transport-belt"] = {
+            {
+              ingredients = {
+                {type = "item", name = "iron-plate", amount = 1},
+                {type = "item", name = "iron-gear-wheel", amount = 1}
+              },
+              products = {
+                {type = "item", name = "transport-belt", amount = 2}
+              }
+            }
+          },
+          ["iron-gear-wheel"] = {
+            {
+              ingredients = {
+                {type = "item", name = "iron-plate", amount = 2}
+              },
+              products = {
+                {type = "item", name = "iron-gear-wheel", amount = 1}
+              }
+            }
+          }
+        }
+        return recipes[name] or {}
+      end
+    })
+    local indexed = {}
+    for _, entry in ipairs(summary) do
+      indexed[("%s:%s"):format(entry.kind, entry.name)] = entry
+    end
+
+    assert.are.equal(2, indexed["item:transport-belt"].count)
+    assert.are.equal(6, indexed["item:transport-belt"].required_count)
+    assert.are.equal(4, indexed["item:transport-belt"].fulfilled_count)
+    assert.is_true(math.abs(indexed["item:transport-belt"].progress - (4 / 6)) < 0.0000001)
+
+    assert.are.equal(1, indexed["item:iron-gear-wheel"].count)
+    assert.are.equal(1, indexed["item:iron-gear-wheel"].required_count)
+    assert.are.equal(0, indexed["item:iron-gear-wheel"].fulfilled_count)
+
+    assert.are.equal(2, indexed["item:iron-plate"].count)
+    assert.are.equal(3, indexed["item:iron-plate"].required_count)
+    assert.are.equal(1, indexed["item:iron-plate"].fulfilled_count)
+  end)
+
+  it("keeps placed split claims from satisfying loose-only item requirements", function()
+    local summary = build_requirements.summarize_missing_requirements({
+      surface = "nauvis",
+      blueprints = {
+        {
+          entity_summary = {
+            {name = "transport-belt", count = 1}
+          }
+        }
+      },
+      items = {
+        {name = "transport-belt", count = 1}
+      }
+    }, {
+      entries = {
+        {
+          item_name = "transport-belt",
+          loose_stock = 0,
+          current_split_claim = 1
+        }
+      }
+    }, {
+      resolve_entity_components = function(entity_name)
+        return {
+          {kind = "item", name = entity_name, count = 1}
+        }
+      end,
+      resolve_recipe_set = function()
+        return {}
+      end
+    })
+
+    assert.are.equal(1, #summary)
+    assert.are.equal("transport-belt", summary[1].name)
+    assert.are.equal(1, summary[1].count)
+    assert.are.equal(2, summary[1].required_count)
+    assert.are.equal(1, summary[1].fulfilled_count)
+  end)
+
+  it("uses loose intermediates to avoid blaming already-available components", function()
+    local summary = build_requirements.summarize_missing_requirements({
+      surface = "nauvis",
+      blueprints = {},
+      items = {
+        {name = "transport-belt", count = 4}
+      }
+    }, {
+      entries = {
+        {
+          item_name = "transport-belt",
+          loose_stock = 2,
+          current_split_claim = 0
+        },
+        {
+          item_name = "iron-gear-wheel",
+          loose_stock = 1,
+          current_split_claim = 0
+        },
+        {
+          item_name = "iron-plate",
+          loose_stock = 1,
+          current_split_claim = 0
+        }
+      }
+    }, {
+      resolve_recipe_set = function(_kind, name)
+        local recipes = {
+          ["transport-belt"] = {
+            {
+              ingredients = {
+                {type = "item", name = "iron-plate", amount = 1},
+                {type = "item", name = "iron-gear-wheel", amount = 1}
+              },
+              products = {
+                {type = "item", name = "transport-belt", amount = 2}
+              }
+            }
+          },
+          ["iron-gear-wheel"] = {
+            {
+              ingredients = {
+                {type = "item", name = "iron-plate", amount = 2}
+              },
+              products = {
+                {type = "item", name = "iron-gear-wheel", amount = 1}
+              }
+            }
+          }
+        }
+        return recipes[name] or {}
+      end
+    })
+
+    assert.are.equal(1, #summary)
+    assert.are.equal("transport-belt", summary[1].name)
+    assert.are.equal(2, summary[1].count)
+    assert.are.equal(4, summary[1].required_count)
+    assert.are.equal(2, summary[1].fulfilled_count)
+  end)
+
+  it("can summarize direct root-item progress without expanding into intermediates", function()
+    local summary = build_requirements.summarize_direct_requirement_progress({
+      surface = "nauvis",
+      blueprints = {
+        {
+          entity_summary = {
+            {name = "transport-belt", count = 4}
+          }
+        }
+      },
+      items = {
+        {name = "iron-chest", count = 2}
+      },
+      technologies = {
+        {name = "automation"}
+      }
+    }, {
+      entries = {
+        {
+          item_name = "transport-belt",
+          loose_stock = 2,
+          current_split_claim = 1
+        },
+        {
+          item_name = "iron-chest",
+          loose_stock = 1,
+          current_split_claim = 0
+        }
+      }
+    }, {
+      include_technologies = false,
+      resolve_entity_components = function(entity_name)
+        return {
+          {kind = "item", name = entity_name, count = 1}
+        }
+      end
+    })
+    local indexed = {}
+    for _, entry in ipairs(summary) do
+      indexed[("%s:%s"):format(entry.kind, entry.name)] = entry
+    end
+
+    assert.are.equal(1, indexed["item:transport-belt"].count)
+    assert.are.equal(4, indexed["item:transport-belt"].required_count)
+    assert.are.equal(3, indexed["item:transport-belt"].fulfilled_count)
+    assert.are.equal(1, indexed["item:iron-chest"].count)
+    assert.are.equal(2, indexed["item:iron-chest"].required_count)
+    assert.are.equal(1, indexed["item:iron-chest"].fulfilled_count)
+    assert.is_nil(indexed["item:automation-science-pack"])
+  end)
+
+  it("supports placed-only direct progress for current blueprint completion", function()
+    local summary = build_requirements.summarize_direct_requirement_progress({
+      surface = "nauvis",
+      blueprints = {
+        {
+          entity_summary = {
+            {name = "transport-belt", count = 4}
+          }
+        }
+      }
+    }, {
+      entries = {
+        {
+          item_name = "transport-belt",
+          loose_stock = 99,
+          current_split_claim = 1
+        }
+      }
+    }, {
+      include_items = false,
+      include_technologies = false,
+      blueprint_satisfaction_mode = "placed_only",
+      resolve_entity_components = function(entity_name)
+        return {
+          {kind = "item", name = entity_name, count = 1}
+        }
+      end
+    })
+
+    assert.are.equal(1, #summary)
+    assert.are.equal("transport-belt", summary[1].name)
+    assert.are.equal(3, summary[1].count)
+    assert.are.equal(4, summary[1].required_count)
+    assert.are.equal(1, summary[1].fulfilled_count)
+  end)
 end)

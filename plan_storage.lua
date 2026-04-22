@@ -1,5 +1,7 @@
 local blueprint_snapshot = require("blueprint_snapshot")
+local blueprint_library = require("blueprint_library")
 local description_codec = require("util.description_codec")
+local cursor_blueprint_source = require("util.cursor_blueprint_source")
 local tracker = require("split_tracker")
 
 local M = {}
@@ -108,29 +110,8 @@ local function source_blueprint_description(source)
   return description
 end
 
-local function source_is_valid(source)
-  return safe_index(source, "valid_for_read") or safe_index(source, "valid")
-end
-
-local function source_type(source)
-  if safe_index(source, "is_blueprint_book") then
-    return "blueprint-book"
-  end
-
-  if safe_index(source, "is_blueprint") then
-    return "blueprint"
-  end
-
-  local record_type = safe_index(source, "type")
-  if type(record_type) == "string" then
-    return record_type
-  end
-
-  return nil
-end
-
 local function source_entries(source)
-  if not source or source_type(source) ~= "blueprint-book" then
+  if not source or cursor_blueprint_source.source_type(source) ~= "blueprint-book" then
     return nil
   end
 
@@ -174,17 +155,8 @@ local function source_entries(source)
 end
 
 local function resolve_import_source(player)
-  local cursor_stack = safe_index(player, "cursor_stack")
-  if cursor_stack and source_is_valid(cursor_stack) and source_type(cursor_stack) == "blueprint-book" then
-    return cursor_stack
-  end
-
-  local cursor_record = safe_index(player, "cursor_record")
-  if cursor_record and source_is_valid(cursor_record) and source_type(cursor_record) == "blueprint-book" then
-    return cursor_record
-  end
-
-  return nil
+  local match = cursor_blueprint_source.find_cursor_blueprint_book(player)
+  return match and match.source or nil
 end
 
 local function apply_active_plan(state, plan, source)
@@ -212,7 +184,7 @@ local function parse_description(description)
 end
 
 local function find_plan_metadata_from_item_stack(item_stack)
-  if not (item_stack and source_is_valid(item_stack) and source_type(item_stack) == "blueprint-book") then
+  if not (item_stack and cursor_blueprint_source.source_is_valid(item_stack) and cursor_blueprint_source.source_type(item_stack) == "blueprint-book") then
     return nil
   end
 
@@ -258,7 +230,7 @@ local function configure_blueprint_link_carrier(stack)
 end
 
 local function decode_blueprint_reference(record)
-  if not (record and source_is_valid(record) and source_type(record) == "blueprint") then
+  if not (record and cursor_blueprint_source.source_is_valid(record) and cursor_blueprint_source.source_type(record) == "blueprint") then
     return nil, "Split book contains an entry that is not a blueprint."
   end
 
@@ -286,7 +258,7 @@ local function decode_blueprint_reference(record)
 end
 
 local function decode_split_from_book_item(book_item, split_index)
-  if not (book_item and source_is_valid(book_item) and source_type(book_item) == "blueprint-book") then
+  if not (book_item and cursor_blueprint_source.source_is_valid(book_item) and cursor_blueprint_source.source_type(book_item) == "blueprint-book") then
     return nil, "Plan book contains an entry that is not a split book."
   end
 
@@ -311,7 +283,7 @@ local function decode_split_from_book_item(book_item, split_index)
 
   for _, slot in ipairs(entries) do
     local entry = slot.entry
-    if entry and source_is_valid(entry) then
+    if entry and cursor_blueprint_source.source_is_valid(entry) then
       local blueprint, error_message = decode_blueprint_reference(entry)
       if not blueprint then
         return nil, error_message
@@ -337,7 +309,7 @@ local function decode_plan_from_book_item(book_item)
   local splits = {}
   for _, slot in ipairs(entries) do
     local entry = slot.entry
-    if entry and source_is_valid(entry) then
+    if entry and cursor_blueprint_source.source_is_valid(entry) then
       local split, error_message = decode_split_from_book_item(entry, #splits + 1)
       if not split then
         return nil, error_message
@@ -422,8 +394,7 @@ function M.decode_plan_from_item_stack(item_stack)
   return decode_plan_from_book_item(item_stack)
 end
 
-function M.import_plan_from_cursor(player, state)
-  local source = M.importable_plan_from_player(player)
+function M.import_plan_from_source(source, state)
   if not source then
     return false, "Hold a Long Pole blueprint book in the cursor to import it."
   end
@@ -435,6 +406,22 @@ function M.import_plan_from_cursor(player, state)
 
   apply_active_plan(state, plan, "imported")
   return true, nil
+end
+
+function M.import_plan_from_cursor(player, state)
+  local source = M.importable_plan_from_player(player)
+  return M.import_plan_from_source(source, state)
+end
+
+function M.import_first_plan_from_blueprint_library(player, state, game_script)
+  local match = blueprint_library.find_first_blueprint_book_matching(player, game_script, function(record)
+    return M.is_importable_plan_book(record)
+  end)
+  if not match then
+    return false, "No Long Pole plan book was found in the blueprint library."
+  end
+
+  return M.import_plan_from_source(match.record, state)
 end
 
 function M.can_export_to_cursor(cursor_stack, state)

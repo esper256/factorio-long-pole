@@ -7,7 +7,9 @@ describe("source guards", function()
     "gui/split_viewer.lua",
     "plan_storage.lua",
     "split_tracker.lua",
-    "util/description_codec.lua"
+    "util/cursor_blueprint_source.lua",
+    "util/description_codec.lua",
+    "util/starting_loose_stock.lua"
   }
 
   local function read_lines(path)

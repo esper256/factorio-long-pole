@@ -122,4 +122,52 @@ describe("blueprint_library", function()
       blueprint_slot = 4
     }, match)
   end)
+
+  it("finds the first matching blueprint book in player blueprints", function()
+    local player = {
+      blueprints = {
+        [2] = blueprint_book("Openers", {
+          [4] = blueprint_book("Candidate Plan", {
+            [1] = blueprint("not-used", "Ignored Child")
+          })
+        }),
+        [5] = blueprint_book("Later Plan", {})
+      }
+    }
+
+    local match = blueprint_library.find_first_player_blueprint_book_matching(player, function(record)
+      return record.type == "blueprint-book" and record.label == "Candidate Plan"
+    end)
+
+    assert.same({
+      record = player.blueprints[2].contents[4],
+      library_root = "player-blueprints",
+      inside_books = {"Openers"},
+      slot = 4
+    }, match)
+  end)
+
+  it("falls back to game blueprint books when the player shelf has no match", function()
+    local player = {
+      blueprints = {}
+    }
+    local game_script = {
+      blueprints = {
+        [8] = blueprint_book("Shared Plans", {
+          [1] = blueprint_book("Game Plan", {})
+        })
+      }
+    }
+
+    local match = blueprint_library.find_first_blueprint_book_matching(player, game_script, function(record)
+      return record.type == "blueprint-book" and record.label == "Game Plan"
+    end)
+
+    assert.same({
+      record = game_script.blueprints[8].contents[1],
+      library_root = "game-blueprints",
+      inside_books = {"Shared Plans"},
+      slot = 1
+    }, match)
+  end)
 end)

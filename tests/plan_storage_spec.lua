@@ -587,6 +587,122 @@ From record.
     }, state.splits[1].items)
   end)
 
+  it("imports the first Long Pole plan book found in the blueprint library", function()
+    local state = {}
+    tracker.init(state)
+
+    local player = {
+      blueprints = {
+        [3] = make_record({
+          type = "blueprint-book",
+          label = "Ignore Me",
+          blueprint_description = "not-a-long-pole-plan",
+          contents = {}
+        }),
+        [7] = make_record({
+          type = "blueprint-book",
+          label = "Auto Imported Plan",
+          blueprint_description = [[format=long-pole-plan;version=1
+plan_id=auto-imported
+visibility=references-only
+default_surface=nauvis
+]],
+          contents = {
+            [2] = make_record({
+              type = "blueprint-book",
+              label = "Auto Imported Split",
+              blueprint_description = [[format=long-pole-split;version=1
+surface=nauvis
+
+--- Extra Items ---
+stone-furnace=1
+
+--- Technologies to Research ---
+automation
+
+--- Notes ---
+From auto import.
+]]
+            })
+          }
+        }),
+        [9] = make_record({
+          type = "blueprint-book",
+          label = "Later Plan",
+          blueprint_description = [[format=long-pole-plan;version=1
+plan_id=later-plan
+visibility=references-only
+default_surface=nauvis
+]],
+          contents = {}
+        })
+      }
+    }
+
+    local ok, error_message = plan_storage.import_first_plan_from_blueprint_library(player, state)
+
+    assert.is_true(ok)
+    assert.is_nil(error_message)
+    assert.are.equal("Auto Imported Plan", state.plan_name)
+    assert.are.equal("auto-imported", state.plan_id)
+    assert.are.equal(1, #state.splits)
+    assert.are.equal("Auto Imported Split", state.splits[1].name)
+  end)
+
+  it("falls back to game blueprint library plan books when the player shelf has none", function()
+    local state = {}
+    tracker.init(state)
+
+    local player = {
+      blueprints = {}
+    }
+    local game_script = {
+      blueprints = {
+        [5] = make_record({
+          type = "blueprint-book",
+          label = "Shared Plans",
+          contents = {
+            [3] = make_record({
+              type = "blueprint-book",
+              label = "Shared Imported Plan",
+              blueprint_description = [[format=long-pole-plan;version=1
+plan_id=shared-plan
+visibility=references-only
+default_surface=nauvis
+]],
+              contents = {
+                [1] = make_record({
+                  type = "blueprint-book",
+                  label = "Shared Imported Split",
+                  blueprint_description = [[format=long-pole-split;version=1
+surface=nauvis
+
+--- Extra Items ---
+burner-mining-drill=2
+
+--- Technologies to Research ---
+automation
+
+--- Notes ---
+From shared library.
+]]
+                })
+              }
+            })
+          }
+        })
+      }
+    }
+
+    local ok, error_message = plan_storage.import_first_plan_from_blueprint_library(player, state, game_script)
+
+    assert.is_true(ok)
+    assert.is_nil(error_message)
+    assert.are.equal("Shared Imported Plan", state.plan_name)
+    assert.are.equal("shared-plan", state.plan_id)
+    assert.are.equal("Shared Imported Split", state.splits[1].name)
+  end)
+
   it("recovers plan and split labels from exported record data when record labels are unavailable", function()
     with_mocked_label_imports({
       ["plan-record-export"] = "Recovered Record Plan",

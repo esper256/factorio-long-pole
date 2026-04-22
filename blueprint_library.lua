@@ -83,6 +83,41 @@ local function find_in_records(records, export_string, context)
   return nil
 end
 
+local function find_first_record_matching(records, predicate, context)
+  for _, entry in ipairs(collect_ordered_records(records)) do
+    local record = entry.record
+    if record and safe_index(record, "valid") then
+      local record_type = safe_index(record, "type")
+      if predicate(record, entry.index, context) then
+        return {
+          record = record,
+          library_root = context.library_root,
+          inside_books = context.inside_books or {},
+          slot = entry.index
+        }
+      end
+
+      if record_type == "blueprint-book" and safe_index(record, "contents") then
+        local next_context = {
+          library_root = context.library_root,
+          inside_books = context.inside_books or {}
+        }
+        local label = record_label(record)
+        if label then
+          next_context.inside_books = append_path(next_context.inside_books, label)
+        end
+
+        local match = find_first_record_matching(safe_index(record, "contents"), predicate, next_context)
+        if match then
+          return match
+        end
+      end
+    end
+  end
+
+  return nil
+end
+
 function M.find_blueprint_path_by_export(player, export_string, game_script)
   if not player or type(export_string) ~= "string" or export_string == "" then
     return nil
@@ -110,6 +145,39 @@ function M.find_blueprint_path_by_export(player, export_string, game_script)
   end
 
   return nil
+end
+
+function M.find_first_blueprint_book_matching(player, game_script, predicate)
+  if not player or type(predicate) ~= "function" then
+    return nil
+  end
+
+  local libraries = {
+    {
+      root_name = "player-blueprints",
+      records = player.blueprints
+    },
+    {
+      root_name = "game-blueprints",
+      records = game_script and game_script.blueprints or nil
+    }
+  }
+
+  for _, library in ipairs(libraries) do
+    local match = find_first_record_matching(library.records, predicate, {
+      library_root = library.root_name,
+      inside_books = {}
+    })
+    if match then
+      return match
+    end
+  end
+
+  return nil
+end
+
+function M.find_first_player_blueprint_book_matching(player, predicate)
+  return M.find_first_blueprint_book_matching(player, nil, predicate)
 end
 
 return M

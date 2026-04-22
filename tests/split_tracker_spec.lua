@@ -1,5 +1,7 @@
 local tracker = require("split_tracker")
 local plan_storage = require("plan_storage")
+local progress_tracker_store = require("progress_tracker_store")
+local build_requirements = require("build_requirements")
 
 describe("split_tracker", function()
   local function initialized_state_with_plan()
@@ -16,6 +18,7 @@ describe("split_tracker", function()
     tracker.init(state)
 
     assert.is_table(state.inventory)
+    assert.is_table(state.progress_tracker)
     assert.is_table(state.splits)
     assert.is_table(state.editor_selection)
     assert.are.equal(1, state.current_split_index)
@@ -168,6 +171,279 @@ describe("split_tracker", function()
     assert.are.equal("Starter Burners", status.previous.name)
     assert.are.equal("First Power", status.current.name)
     assert.are.equal("Labs", status.upcoming[1].name)
+  end)
+
+  it("only recalculates missing requirements for the current split views", function()
+    local state = initialized_state_with_plan()
+    tracker.add_split(state, "Labs")
+    tracker.add_split(state, "Mall")
+    state.current_split_index = 2
+
+    local original_missing = build_requirements.summarize_missing_requirements
+    local original_direct = build_requirements.summarize_direct_requirement_progress
+    local calls = {}
+
+    build_requirements.summarize_missing_requirements = function(split, _snapshot, options)
+      calls[#calls + 1] = {
+        split_name = split.name,
+        include_blueprints = options and options.include_blueprints,
+        include_items = options and options.include_items
+      }
+      return {}, nil, {}
+    end
+    build_requirements.summarize_direct_requirement_progress = function()
+      return {}, nil, {}
+    end
+
+    local ok, result = pcall(function()
+      return tracker.get_split_status(state, "player")
+    end)
+
+    build_requirements.summarize_missing_requirements = original_missing
+    build_requirements.summarize_direct_requirement_progress = original_direct
+
+    assert.is_true(ok)
+    assert.is_table(result)
+    assert.are.equal(2, #calls)
+    assert.are.equal("First Power", calls[1].split_name)
+    assert.is_nil(calls[1].include_blueprints)
+    assert.is_nil(calls[1].include_items)
+    assert.are.equal("First Power", calls[2].split_name)
+    assert.is_false(calls[2].include_blueprints)
+    assert.is_false(calls[2].include_items)
+  end)
+
+  it("reuses cached root requirements across repeated status refreshes", function()
+    local state = initialized_state_with_plan()
+    tracker.add_split(state, "Labs")
+    state.current_split_index = 2
+
+    local original_build_root_requirements = build_requirements.build_root_requirements
+    local original_missing = build_requirements.summarize_missing_requirements
+    local original_direct = build_requirements.summarize_direct_requirement_progress
+    local build_root_call_count = 0
+
+    build_requirements.build_root_requirements = function(split, options)
+      build_root_call_count = build_root_call_count + 1
+      return original_build_root_requirements(split, options)
+    end
+    build_requirements.summarize_missing_requirements = function(_split, _snapshot, _options)
+      return {}, nil, {}
+    end
+    build_requirements.summarize_direct_requirement_progress = function(_split, _snapshot, _options)
+      return {}, nil, {}
+    end
+
+    local ok, result = pcall(function()
+      tracker.get_split_status(state, "player")
+      tracker.get_split_status(state, "player")
+      return true
+    end)
+
+    build_requirements.build_root_requirements = original_build_root_requirements
+    build_requirements.summarize_missing_requirements = original_missing
+    build_requirements.summarize_direct_requirement_progress = original_direct
+
+    assert.is_true(ok)
+    assert.is_true(result)
+    assert.are.equal(5, build_root_call_count)
+  end)
+
+  it("derives current split missing intermediates from the tracked split snapshot", function()
+    local previous_prototypes = rawget(_G, "prototypes")
+    _G.prototypes = {
+      entity = {
+        ["transport-belt"] = {
+          items_to_place_this = {
+            {name = "transport-belt", count = 1}
+          }
+        }
+      },
+      recipe = {
+        ["transport-belt"] = {
+          ingredients = {
+            {type = "item", name = "iron-plate", amount = 1},
+            {type = "item", name = "iron-gear-wheel", amount = 1}
+          },
+          products = {
+            {type = "item", name = "transport-belt", amount = 2}
+          }
+        },
+        ["iron-gear-wheel"] = {
+          ingredients = {
+            {type = "item", name = "iron-plate", amount = 2}
+          },
+          products = {
+            {type = "item", name = "iron-gear-wheel", amount = 1}
+          }
+        }
+      }
+    }
+
+    local state = {}
+    tracker.init(state)
+    plan_storage.create_new_plan(state)
+    tracker.add_split(state, "Belts")
+    assert.is_true(tracker.set_split_blueprints(state, 1, {
+      {
+        name = "Starter line",
+        entity_summary = {
+          {name = "transport-belt", count = 6}
+        }
+      }
+    }))
+
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "transport-belt", 2)
+    progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 41,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "transport-belt",
+      split_id = state.splits[1].id
+    })
+    progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 42,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "transport-belt",
+      split_id = state.splits[1].id
+    })
+
+    local status = tracker.get_split_status(state, "player")
+    local indexed = {}
+    for _, entry in ipairs(status.current.missing) do
+      indexed[entry.name] = entry
+    end
+
+    assert.are.equal(2, indexed["transport-belt"].count)
+    assert.are.equal(1, indexed["iron-gear-wheel"].count)
+    assert.are.equal(3, indexed["iron-plate"].count)
+
+    _G.prototypes = previous_prototypes
+  end)
+
+  it("builds separate icon groups for previous debt, current placement and research, and next readiness", function()
+    local previous_prototypes = rawget(_G, "prototypes")
+    _G.prototypes = {
+      entity = {
+        ["transport-belt"] = {
+          items_to_place_this = {
+            {name = "transport-belt", count = 1}
+          }
+        }
+      },
+      technology = {
+        automation = {
+          research_unit_count = 2,
+          research_unit_ingredients = {
+            {name = "automation-science-pack", amount = 1}
+          }
+        }
+      },
+      recipe = {
+        ["transport-belt"] = {
+          ingredients = {
+            {type = "item", name = "iron-plate", amount = 1},
+            {type = "item", name = "iron-gear-wheel", amount = 1}
+          },
+          products = {
+            {type = "item", name = "transport-belt", amount = 2}
+          }
+        },
+        ["iron-chest"] = {
+          ingredients = {
+            {type = "item", name = "iron-plate", amount = 8}
+          },
+          products = {
+            {type = "item", name = "iron-chest", amount = 1}
+          }
+        },
+        ["automation-science-pack"] = {
+          ingredients = {
+            {type = "item", name = "copper-plate", amount = 1},
+            {type = "item", name = "iron-gear-wheel", amount = 1}
+          },
+          products = {
+            {type = "item", name = "automation-science-pack", amount = 1}
+          }
+        },
+        ["iron-gear-wheel"] = {
+          ingredients = {
+            {type = "item", name = "iron-plate", amount = 2}
+          },
+          products = {
+            {type = "item", name = "iron-gear-wheel", amount = 1}
+          }
+        }
+      }
+    }
+
+    local state = {}
+    tracker.init(state)
+    plan_storage.create_new_plan(state)
+    tracker.add_split(state, "Prep")
+    tracker.add_split(state, "Current")
+    tracker.add_split(state, "Next")
+
+    state.splits[1].completed_elapsed_ticks = 300
+    assert.is_true(tracker.set_split_blueprints(state, 2, {
+      {
+        entity_summary = {
+          {name = "transport-belt", count = 4}
+        }
+      }
+    }))
+    assert.is_true(tracker.set_split_items(state, 2, {
+      {name = "iron-chest", count = 2}
+    }))
+    assert.is_true(tracker.set_split_technologies(state, 2, {
+      {name = "automation"}
+    }))
+    assert.is_true(tracker.set_split_blueprints(state, 3, {
+      {
+        entity_summary = {
+          {name = "transport-belt", count = 2}
+        }
+      }
+    }))
+    assert.is_true(tracker.set_split_items(state, 3, {
+      {name = "burner-mining-drill", count = 3},
+      {name = "assembling-machine-1", count = 1}
+    }))
+    state.current_split_index = 2
+
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "transport-belt", 2)
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-chest", 1)
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "automation-science-pack", 1)
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-plate", 20)
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "copper-plate", 2)
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "burner-mining-drill", 1)
+    progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 91,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "transport-belt",
+      split_id = state.splits[2].id
+    })
+
+    local status = tracker.get_split_status(state, "player")
+
+    assert.are.equal(1, #status.previous.icon_groups)
+    assert.are.equal("carry-over-stock", status.previous.icon_groups[1].kind)
+    assert.are.equal("alert", status.previous.icon_groups[1].tone)
+    assert.are.equal("iron-chest", status.previous.icon_groups[1].entries[1].name)
+    assert.are.equal("transport-belt", status.previous.icon_groups[1].entries[2].name)
+
+    assert.are.equal(2, #status.current.icon_groups)
+    assert.are.equal("placement-progress", status.current.icon_groups[1].kind)
+    assert.are.equal("transport-belt", status.current.icon_groups[1].entries[1].name)
+    assert.are.equal(3, status.current.icon_groups[1].entries[1].count)
+    assert.are.equal("research-production", status.current.icon_groups[2].kind)
+
+    assert.are.equal(1, #status.upcoming[1].icon_groups)
+    assert.are.equal("next-split-readiness", status.upcoming[1].icon_groups[1].kind)
+
+    _G.prototypes = previous_prototypes
   end)
 
   it("updates split fields and supports reordering", function()

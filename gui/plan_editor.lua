@@ -5,6 +5,7 @@ local item_quantity_dialog = require("gui.item_quantity_dialog")
 local plan_storage = require("plan_storage")
 local slot_grid = require("gui.slot_grid")
 local tracker = require("split_tracker")
+local cursor_blueprint_source = require("util.cursor_blueprint_source")
 
 local M = {}
 
@@ -398,94 +399,37 @@ local function build_research_entries(split, technology_prototypes)
 end
 
 local function get_held_blueprint(player)
-  local cursor_record = player.cursor_record
-  if cursor_record and cursor_record.valid then
-    local record = cursor_record
-    local source_book_label = nil
-    local source_book_active_index = nil
+  local resolved, error_message = cursor_blueprint_source.resolve_selected_blueprint(player)
+  if not resolved then
+    return nil, error_message
+  end
 
-    if record.type == "blueprint-book" then
-      source_book_label = record.label
-      source_book_active_index = record.get_active_index(player)
-      record = record.get_selected_record(player)
-      if not record then
-        return nil, "The held blueprint book does not have an active blueprint selected."
-      end
-    end
+  local source = resolved.source
+  local export_string = source.export_record and source.export_record() or source.export_stack()
+  local entities = source.get_blueprint_entities and source.get_blueprint_entities() or {}
+  local entity_count = source.get_blueprint_entity_count and source.get_blueprint_entity_count() or 0
+  local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
+  local blueprint_name = source.label
 
-    if record.type == "blueprint" then
-      if not record.is_blueprint_setup() then
-        return nil, "The held blueprint is empty."
-      end
-
-      local export_string = record.export_record()
-      local entities = record.get_blueprint_entities() or {}
-      local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
-      return {
-        name = blueprint_snapshot.resolve_name_from_export(export_string, "Unnamed Blueprint"),
-        export_string = export_string,
-        entity_count = record.get_blueprint_entity_count(),
-        entity_summary = blueprint_snapshot.summarize_entities(entities),
-        library_root = library_match and library_match.library_root or "player-blueprints",
-        inside_books = library_match and library_match.inside_books or nil,
-        blueprint_slot = library_match and library_match.blueprint_slot or source_book_active_index,
-        source_book_label = source_book_label,
-        source_book_active_index = source_book_active_index
-      }, nil
+  if not blueprint_name or blueprint_name == "" then
+    if resolved.carrier == "cursor_record" then
+      blueprint_name = blueprint_snapshot.resolve_name_from_export(export_string, "Unnamed Blueprint")
+    else
+      blueprint_name = "Unnamed Blueprint"
     end
   end
 
-  local candidate_stacks = {
-    player.cursor_stack,
-    player.blueprint_to_setup
-  }
-
-  for _, stack in ipairs(candidate_stacks) do
-    if stack and stack.valid_for_read then
-      local source_book_label = nil
-      local source_book_active_index = nil
-
-      if stack.is_blueprint_book then
-        local inventory = stack.get_inventory(defines.inventory.item_main)
-        local active_index = stack.active_index
-        if not (inventory and active_index and inventory[active_index] and inventory[active_index].valid_for_read) then
-          return nil, "The held blueprint book does not have an active blueprint selected."
-        end
-
-        source_book_label = stack.label
-        source_book_active_index = active_index
-        stack = inventory[active_index]
-      end
-
-      if stack.is_blueprint then
-        if stack.get_blueprint_entity_count() < 1 then
-          return nil, "The held blueprint is empty."
-        end
-
-        local blueprint_name = stack.label
-        if not blueprint_name or blueprint_name == "" then
-          blueprint_name = "Unnamed Blueprint"
-        end
-
-        local entities = stack.get_blueprint_entities() or {}
-        local export_string = stack.export_stack()
-        local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
-        return {
-          name = blueprint_name,
-          export_string = export_string,
-          entity_count = stack.get_blueprint_entity_count(),
-          entity_summary = blueprint_snapshot.summarize_entities(entities),
-          library_root = library_match and library_match.library_root or "player-blueprints",
-          inside_books = library_match and library_match.inside_books or nil,
-          blueprint_slot = library_match and library_match.blueprint_slot or source_book_active_index,
-          source_book_label = source_book_label,
-          source_book_active_index = source_book_active_index
-        }, nil
-      end
-    end
-  end
-
-  return nil, "Hold a configured blueprint or blueprint book in the cursor first."
+  return {
+    name = blueprint_name,
+    export_string = export_string,
+    entity_count = entity_count,
+    entity_summary = blueprint_snapshot.summarize_entities(entities),
+    library_root = library_match and library_match.library_root or "player-blueprints",
+    inside_books = library_match and library_match.inside_books or nil,
+    blueprint_slot = library_match and library_match.blueprint_slot or resolved.source_book_active_index,
+    source_book_label = resolved.source_book_label,
+    source_book_active_index = resolved.source_book_active_index
+  }, nil
 end
 
 local function add_blueprint_sources(parent, split)
@@ -504,7 +448,7 @@ local function add_blueprint_sources(parent, split)
 
   local label = header.add({
     type = "label",
-    caption = "Blueprints"
+    caption = "Constructed Blueprints"
   })
   label.style = "semibold_label"
 
@@ -519,7 +463,7 @@ local function add_blueprint_sources(parent, split)
     caption = "Use Held",
     tags = {split_id = split.id}
   })
-  add_button.tooltip = "Capture the configured blueprint currently held in the cursor."
+  add_button.tooltip = "Capture a held blueprint whose entities must be placed before this split is complete."
   add_button.style.width = 110
   add_button.style.height = PANEL_HEADER_HEIGHT
 
@@ -541,7 +485,7 @@ local function add_blueprint_sources(parent, split)
   if #split.blueprints == 0 then
     local empty = chips.add({
       type = "label",
-      caption = "No linked blueprints"
+      caption = "No required blueprints"
     })
     empty.style.font_color = {0.8, 0.8, 0.8}
     empty.style.top_margin = 4
@@ -616,7 +560,7 @@ local function add_extra_items_panel(parent, split)
 
   local label = header.add({
     type = "label",
-    caption = "Extra"
+    caption = "Extra Stock"
   })
   label.style = "semibold_label"
 
@@ -633,7 +577,7 @@ local function add_extra_items_panel(parent, split)
     vertically_stretchable = false,
     minimum_entry_count = math.max(1, #split.items + 1),
     button_name = M.extra_item_cell_button_name,
-    empty_tooltip = "Click to add an extra item to this split.",
+    empty_tooltip = "Click to add an extra stock target for this split.",
     build_tags = function(entry, index)
       return {
         split_id = split.id,
@@ -741,7 +685,7 @@ local function add_research_panel(parent, state, split)
 
   local label = panel.add({
     type = "label",
-    caption = "Research"
+    caption = "Completed Research"
   })
   label.style = "semibold_label"
   local technology_names, captions, technology_prototypes = technology_picker_choices(split)
@@ -757,7 +701,7 @@ local function add_research_panel(parent, state, split)
   if #research_entries == 0 then
     local empty = panel.add({
       type = "label",
-      caption = "No research selected."
+      caption = "No research required."
     })
     empty.style.font_color = {0.8, 0.8, 0.8}
     empty.style.top_margin = 8
@@ -801,7 +745,7 @@ local function add_research_panel(parent, state, split)
   picker.style.width = RESEARCH_COLUMN_WIDTH - 62
   picker.enabled = #captions > 0
   picker.tooltip = #captions > 0
-    and "Choose a technology to add to this split."
+    and "Choose a technology that must be completed before this split is done."
     or "All available technologies are already selected."
 
   local add_button = controls.add({
@@ -812,7 +756,7 @@ local function add_research_panel(parent, state, split)
   })
   style_compact_button(add_button, RESEARCH_ADD_BUTTON_WIDTH, PANEL_HEADER_HEIGHT)
   add_button.enabled = #technology_names > 0
-  add_button.tooltip = "Add the selected technology to this split."
+  add_button.tooltip = "Add a technology that must be completed before this split is done."
 
   return panel
 end
@@ -851,11 +795,11 @@ local function add_shared_column_headers(parent, row_width)
 
   add_header_label(header_row, "Split", CONTROL_COLUMN_WIDTH, false)
   add_header_gap(header_row, HEADER_TO_FIELDS_GAP)
-  add_header_label(header_row, "Build", BUILD_COLUMN_WIDTH, false)
+  add_header_label(header_row, "Placement Goals", BUILD_COLUMN_WIDTH, false)
   add_header_gap(header_row, COLUMN_SPACING)
-  add_header_label(header_row, "Research", RESEARCH_COLUMN_WIDTH, false)
+  add_header_label(header_row, "Research Goals", RESEARCH_COLUMN_WIDTH, false)
   add_header_gap(header_row, COLUMN_SPACING)
-  add_header_label(header_row, "Total", TOTAL_PANEL_MIN_WIDTH, true)
+  add_header_label(header_row, "Planning Totals", TOTAL_PANEL_MIN_WIDTH, true)
 end
 
 local function add_split_row(parent, state, split_index, split, total_splits, row_width)
