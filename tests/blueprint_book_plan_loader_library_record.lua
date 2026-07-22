@@ -5,14 +5,32 @@ local record_book = {
   label = "Library plan [LP]",
   contents = {
     [7] = {
-      type = "blueprint",
+      type = "blueprint-book",
       label = "Second split",
-      blueprint_description = "",
-      get_blueprint_entities = function()
-        return {
-          {name = "lab"}
+      blueprint_description = [[
+====== long-pole data-begin ======
+research automation
+====== long-pole data-end ======
+]],
+      contents = {
+        [1] = {
+          type = "blueprint",
+          get_blueprint_entities = function()
+            return {
+              {name = "lab"},
+              {name = "lab"}
+            }
+          end
+        },
+        [2] = {
+          type = "blueprint",
+          get_blueprint_entities = function()
+            return {
+              {name = "burner-inserter"}
+            }
+          end
         }
-      end
+      }
     },
     [2] = {
       type = "blueprint",
@@ -33,7 +51,9 @@ assert(plan, load_error)
 assert(plan:split_at(1).label == "First split")
 assert(plan:split_at(2).label == "Second split")
 assert(plan:split_at(1):entity_count("burner-mining-drill") == 1)
-assert(plan:split_at(2):entity_count("lab") == 1)
+assert(plan:split_at(2):entity_count("lab") == 2)
+assert(plan:split_at(2):entity_count("burner-inserter") == 1)
+assert(plan:split_at(2):requires_research("automation"))
 
 local printed_messages = {}
 local player = {

@@ -3,8 +3,10 @@
 -- Other features should depend on this module and the returned speedrun_plan
 -- object, never on blueprint descriptions or the Factorio blueprint API.
 --
--- Each split blueprint may include this block in its description. Text outside
--- the markers is left for the plan author's notes.
+-- A split may be one blueprint or one flat blueprint book. In either case, the
+-- top-level split item owns this block; a split book's child blueprints only
+-- contribute their entities. Text outside the markers is left for the plan
+-- author's notes.
 --
 --   ====== long-pole data-begin ======
 --   # Comments and blank lines are ignored.
@@ -30,7 +32,15 @@ local function non_empty_label(page, location)
   return page.label
 end
 
-local function entity_counts(page)
+local function is_blueprint(page)
+  return page.is_blueprint == true or page.type == "blueprint"
+end
+
+local function is_blueprint_book(page)
+  return page.is_blueprint_book == true or page.type == "blueprint-book"
+end
+
+local function blueprint_entity_counts(page)
   local counts = {}
   local entities = page.get_blueprint_entities() or {}
 
@@ -41,22 +51,91 @@ local function entity_counts(page)
   return counts
 end
 
-local function read_blueprint(page, location)
-  local is_blueprint = page.is_blueprint == true or page.type == "blueprint"
-  if not is_blueprint then
+local function add_entity_counts(total, counts)
+  for entity_name, count in pairs(counts) do
+    total[entity_name] = (total[entity_name] or 0) + count
+  end
+end
+
+local function read_flat_blueprint(page, location)
+  if not is_blueprint(page) then
     return nil, location .. " must be a blueprint, not a nested book or planner"
   end
+  return blueprint_entity_counts(page)
+end
 
+local function read_flat_stack_book(book, location)
+  local inventory = book.get_inventory(defines.inventory.item_main)
+  if not inventory then
+    return nil, location .. " has no item-main inventory"
+  end
+
+  local counts = {}
+  for index = 1, #inventory do
+    local page = inventory[index]
+    if page.valid_for_read then
+      local page_counts, page_error = read_flat_blueprint(page, location .. " page " .. index)
+      if not page_counts then
+        return nil, page_error
+      end
+      add_entity_counts(counts, page_counts)
+    end
+  end
+  return counts
+end
+
+local function read_flat_record_book(book, location)
+  local counts = {}
+  for index, page in pairs(book.contents) do
+    local page_counts, page_error = read_flat_blueprint(page, location .. " page " .. index)
+    if not page_counts then
+      return nil, page_error
+    end
+    add_entity_counts(counts, page_counts)
+  end
+  return counts
+end
+
+local function read_split_book(book, location)
+  local label, label_error = non_empty_label(book, location)
+  if not label then
+    return nil, label_error
+  end
+
+  local counts, counts_error
+  if book.type ~= nil then
+    counts, counts_error = read_flat_record_book(book, location)
+  else
+    counts, counts_error = read_flat_stack_book(book, location)
+  end
+  if not counts then
+    return nil, counts_error
+  end
+
+  return {
+    label = label,
+    description = book.blueprint_description or "",
+    entity_counts = counts
+  }
+end
+
+local function read_split(page, location)
   local label, label_error = non_empty_label(page, location)
   if not label then
     return nil, label_error
   end
 
-  return {
-    label = label,
-    description = page.blueprint_description or "",
-    entity_counts = entity_counts(page)
-  }
+  if is_blueprint(page) then
+    return {
+      label = label,
+      description = page.blueprint_description or "",
+      entity_counts = blueprint_entity_counts(page)
+    }
+  end
+  if is_blueprint_book(page) then
+    return read_split_book(page, location)
+  end
+  return nil, location .. " must be a blueprint or a flat blueprint book"
 end
 
 local function read_stack_book(book)
@@ -73,11 +152,11 @@ local function read_stack_book(book)
   for index = 1, #inventory do
     local page = inventory[index]
     if page.valid_for_read then
-      local blueprint, page_error = read_blueprint(page, "book page " .. index)
-      if not blueprint then
+      local split, page_error = read_split(page, "book page " .. index)
+      if not split then
         return nil, page_error
       end
-      pages[#pages + 1] = blueprint
+      pages[#pages + 1] = split
     end
   end
 
@@ -97,11 +176,11 @@ local function read_record_book(book)
 
   local pages = {}
   for _, index in ipairs(indexes) do
-    local blueprint, page_error = read_blueprint(book.contents[index], "book page " .. index)
-    if not blueprint then
+    local split, page_error = read_split(book.contents[index], "book page " .. index)
+    if not split then
       return nil, page_error
     end
-    pages[#pages + 1] = blueprint
+    pages[#pages + 1] = split
   end
 
   return pages

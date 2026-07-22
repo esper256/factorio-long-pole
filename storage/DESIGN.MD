@@ -1,10 +1,7 @@
 Each speedrun plan should encode to a blueprint book,
-Inside each book is a sequence of blueprints, each blueprint represents a split.
-Each blueprint label is the name of the split.
-The order of the blueprints inside of the book is the order of the splits.
-The contents of the blueprint are the entities that the player should place when running that split.
+Inside each book is a sequence of split entries. Each entry is either a blueprint or a flat blueprint book, and its label is the name of the split. The order of the entries inside of the plan book is the order of the splits. A blueprint entry contains the entities that the player should place for that split. A split-book entry sums the entities in each of its direct child blueprints; nested books are not allowed.
 
-There's some extra data that would be good to store with each speedrun plan split, such as if you want to have 500 coal ready. Or which technologies should be researched. This extra data should be put in the description of the blueprint in some kind of ====== long-pole data-begin ====== section with a known format.
+There's some extra data that would be good to store with each speedrun plan split, such as if you want to have 500 coal ready. Or which technologies should be researched. This extra data should be put in the description of the split entry (the outer book when the split is a book) in some kind of ====== long-pole data-begin ====== section with a known format.
 
 The mod owns only the text between these exact markers; all other description text remains human notes. Blank lines and lines starting with # are comments. The initial directives are:
 
