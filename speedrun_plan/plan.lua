@@ -55,6 +55,11 @@ function M.new(label, split_sources)
   }, PlanMetatable)
 end
 
+function M.register_metatables(script_root)
+  script_root.register_metatable("long-pole-speedrun-plan", PlanMetatable)
+  script_root.register_metatable("long-pole-speedrun-plan-split", SplitMetatable)
+end
+
 function PlanMethods:split_count()
   return #self.splits
 end

@@ -34,3 +34,28 @@ assert(plan:split_at(1).label == "First split")
 assert(plan:split_at(2).label == "Second split")
 assert(plan:split_at(1):entity_count("burner-mining-drill") == 1)
 assert(plan:split_at(2):entity_count("lab") == 1)
+
+local printed_messages = {}
+local player = {
+  blueprints = {
+    {
+      type = "blueprint-book",
+      label = "Megabase rail grid",
+      contents = function()
+        error("unmarked books must not be opened")
+      end
+    },
+    record_book
+  },
+  print = function(message)
+    printed_messages[#printed_messages + 1] = message
+  end
+}
+
+local next_plan, library_book_index = loader.load_next_library_book_for_player(player, 0)
+assert(next_plan.label == "Library plan [LP]")
+assert(library_book_index == 2)
+
+local no_plan = loader.load_next_library_book_for_player(player, 2)
+assert(no_plan == nil)
+assert(printed_messages[1] == "[Long Pole] No later [LP] blueprint book was found in your library.")

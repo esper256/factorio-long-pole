@@ -237,4 +237,22 @@ function M.load_book_for_player(player, book)
   return plan, load_error
 end
 
+-- Finds the next top-level [LP] book after a blueprint-library index. Unmarked
+-- books are identified from their label only and are never opened or parsed.
+function M.load_next_library_book_for_player(player, after_index)
+  for index = after_index + 1, #player.blueprints do
+    local book = player.blueprints[index]
+    if M.is_speedrun_plan_book(book) then
+      local plan, load_error = M.load_book_for_player(player, book)
+      if not plan then
+        return nil, nil, load_error
+      end
+      return plan, index
+    end
+  end
+
+  player.print("[Long Pole] No later [LP] blueprint book was found in your library.")
+  return nil
+end
+
 return M
