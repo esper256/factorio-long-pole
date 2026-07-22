@@ -204,6 +204,39 @@ function M.loose_stock(product)
   return M.total_products_produced(product) - (product.consumed or 0) - (product.placed or 0) - (product.destroyed or 0)
 end
 
+-- Aggregate queries intentionally return numbers, not cached views. The HUD
+-- needs totals across every tracked surface, while the mutable ledger remains
+-- the single source of truth.
+function M.total_loose_stock(state, product_name)
+  local total = 0
+  for _, surface in pairs(state.surfaces) do
+    local product = surface.products[product_name]
+    if product then
+      total = total + M.loose_stock(product)
+    end
+  end
+  return total
+end
+
+function M.total_placed_products(state, product_name)
+  local total = 0
+  for _, surface in pairs(state.surfaces) do
+    local product = surface.products[product_name]
+    if product then
+      total = total + product.placed
+    end
+  end
+  return total
+end
+
+function M.placed_product_count_snapshot(state, product_names)
+  local snapshot = {}
+  for _, product_name in ipairs(product_names) do
+    snapshot[product_name] = M.total_placed_products(state, product_name)
+  end
+  return snapshot
+end
+
 -- Replaces the production-statistics fields for a surface. Unlike the set_*
 -- methods, absent products are reset to zero because this is a full snapshot.
 function M.reconcile_product_statistics(state, surface_name, produced_counts, consumed_counts)

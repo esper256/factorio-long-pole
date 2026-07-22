@@ -6,6 +6,7 @@ local function element(parent, specification)
     caption = specification.caption,
     sprite = specification.sprite,
     tooltip = specification.tooltip,
+    value = specification.value,
     visible = true,
     style = {}
   }
@@ -41,7 +42,13 @@ hud.refresh(player, {
   plan_label = "Any% practice",
   current_split_label = "Burner phase",
   next_split_label = "Automation",
-  game_tick = 3660
+  game_tick = 3660,
+  construction_progress = {
+    total = 10,
+    done = 4,
+    pending = 3,
+    tooltip = "Construction: 4 placed · 3 ready to place · 3 remaining"
+  }
 })
 
 local hud_element = left.long_pole_speedrun_hud
@@ -52,6 +59,10 @@ assert(hud_element.current_split.caption == "Burner phase  0:01:01")
 assert(hud_element.long_pole_advance_split.caption == "Automation")
 assert(hud_element.previous_split.visible == false)
 assert(header.long_pole_next_plan.sprite == "utility/right_arrow")
+assert(hud_element.construction_progress.done.style.width == 128)
+assert(hud_element.construction_progress.pending.style.width == 96)
+assert(hud_element.construction_progress.not_started.style.width == 96)
+assert(hud_element.construction_progress.tooltip == "Construction: 4 placed · 3 ready to place · 3 remaining")
 
 hud.refresh(player, {
   plan_label = "Any% practice",

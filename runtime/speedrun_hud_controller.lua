@@ -2,6 +2,8 @@
 local speedrun_hud = require("hud.speedrun_hud")
 local speedrun_attempts = require("runtime_state.speedrun_attempts")
 local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
+local construction_progress = require("progress_analysis.construction_progress")
+local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
 local M = {}
 
@@ -16,13 +18,29 @@ local function auto_load_first_plan(player)
 
   local plan, library_book_index = blueprint_book_plan_loader.load_first_library_book_for_player(player)
   if plan then
-    speedrun_attempts.start(player.index, plan, library_book_index)
+    speedrun_attempts.start(player.index, plan, library_book_index, long_pole_runtime_state.get().debug_game_state)
   end
 end
 
 local function refresh(player)
   local attempt = speedrun_attempts.get(player.index)
-  speedrun_hud.refresh(player, attempt and attempt:hud_view(game.tick) or nil)
+  if not attempt then
+    speedrun_hud.refresh(player, nil)
+    return
+  end
+
+  local state = long_pole_runtime_state.get().debug_game_state
+  attempt:ensure_current_split_started(state)
+  local view = attempt:hud_view(game.tick)
+  local split = attempt:current_split()
+  if split then
+    view.construction_progress = construction_progress.for_split(
+      split,
+      state,
+      attempt.split_start_placed_product_counts
+    )
+  end
+  speedrun_hud.refresh(player, view)
 end
 
 function M.on_init()
@@ -65,7 +83,7 @@ function M.load_library_plan(player, library_book_index)
     return nil, load_error
   end
 
-  speedrun_attempts.start(player.index, plan, library_book_index)
+  speedrun_attempts.start(player.index, plan, library_book_index, long_pole_runtime_state.get().debug_game_state)
   refresh(player)
   return plan
 end
@@ -79,7 +97,7 @@ function M.on_gui_click(event)
   if event.element.name == speedrun_hud.advance_split_button_name() then
     local attempt = speedrun_attempts.get(player.index)
     if attempt then
-      attempt:mark_current_split_done(game.tick)
+      attempt:mark_current_split_done(game.tick, long_pole_runtime_state.get().debug_game_state)
       refresh(player)
     end
     return
@@ -95,7 +113,7 @@ function M.on_gui_click(event)
     return
   end
 
-  speedrun_attempts.start(player.index, plan, library_book_index)
+  speedrun_attempts.start(player.index, plan, library_book_index, long_pole_runtime_state.get().debug_game_state)
   refresh(player)
 end
 

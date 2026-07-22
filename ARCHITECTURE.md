@@ -16,7 +16,7 @@ The general use case is:
 2. Start a new game and load the plan.
 3. The Mod adds a small HUD to the game displaying what aspect of the current split is predicted to take the longest (the “long pole”).
 4. While the GUI will have to be refined iteratively. It can help to imagine a starting point. 2 progress bars and a list.
-   - One progress bar represents the factory construction speed. if X entitites need to be placed for the next expansion of the factory, that progress bar could be filled up to Y with one color that represents the number of these entitites that have been produced (and are therefor eligible to be placed) and another color Z, even smaller which represents the number of entities the player has placed.
+   - One progress bar represents the factory construction speed. Blueprint entities are normalized to their placement items when imported, so if X placement items are needed for the next expansion, that progress bar could be filled up to Y with one color that represents the number of those items produced and eligible to be placed and another color Z, even smaller, representing items actually spent placing the current split.
    - One progress bar represents science research. A subset of the progress bar can be colored for the science packs that need to be produced out of the whole progress bar which is how many packs have been consumed on the way to the total goal.
    - A truncated list showing the worst offenders for what the holdup is on advancing to the next split (gear wheels, copper plate etc).
 
@@ -29,7 +29,7 @@ The mod source code must be well organized into the following major components
 1. The root essentials runtime layer as dictated by the Factorio mod API. These files (control.lua etc) should be as small as they can be. It should be organized in such a way to allow integration tests to act as the player causing events (gui events, quick actions activated) as well as the Factorio game itself by replaying recorded game state.
 2. A data component that represents a speedrun plan
    - This will include a list of splits
-   - Each split includes: a set of technologies that should be researched, a list of entities (assemblers, inserters, transport belts, etc) that should be placed in the world and their quantities, and a list of extra items that should be crafted or mined.
+   - Each split includes: a set of technologies that should be researched, a list of placement items derived from its blueprints (assemblers, inserters, transport belts, rails, etc) and their quantities, and a list of extra items that should be crafted or mined.
    - Splits might also include additional data such as record times the player has sped through the split, which is not really part of the split data but metadata saved to it. Keeping this cleanly separated will be good design.
    - It is anticipated that the player will have a key that will mark a split as completed and move to the next split. It might be a feature of the mod to eventually be able to automatically determine if a split is complete and advance and that should be left open as a possible future feature, but not 1.0
 3. A data component that represents an inferred game state tracking progress in the speedrun, this will be important to create mocks for tests

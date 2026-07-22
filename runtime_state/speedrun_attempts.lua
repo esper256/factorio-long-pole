@@ -16,8 +16,8 @@ function M.get(player_index)
   return attempts_by_player()[player_index]
 end
 
-function M.start(player_index, plan, library_book_index)
-  local attempt = speedrun_attempt.new(plan, library_book_index)
+function M.start(player_index, plan, library_book_index, state)
+  local attempt = speedrun_attempt.new(plan, library_book_index, state)
   attempts_by_player()[player_index] = attempt
   return attempt
 end

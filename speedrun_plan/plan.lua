@@ -28,10 +28,10 @@ end
 local function new_split(source)
   local split = {
     label = source.label,
-    entity_counts = source.entity_counts,
+    placement_item_counts = source.placement_item_counts,
     extra_item_counts = source.extra_item_counts,
     research_technologies = source.research_technologies,
-    entity_names = sorted_names(source.entity_counts),
+    placement_item_names = sorted_names(source.placement_item_counts),
     extra_item_names = sorted_names(source.extra_item_counts),
     research_technology_names = sorted_names(source.research_technologies)
   }
@@ -68,8 +68,8 @@ function PlanMethods:split_at(index)
   return self.splits[index]
 end
 
-function SplitMethods:entity_count(entity_name)
-  return self.entity_counts[entity_name] or 0
+function SplitMethods:placement_item_count(item_name)
+  return self.placement_item_counts[item_name] or 0
 end
 
 function SplitMethods:extra_item_count(item_name)

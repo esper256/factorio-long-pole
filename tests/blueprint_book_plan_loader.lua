@@ -5,6 +5,17 @@ defines = {
   }
 }
 
+prototypes = {
+  entity = {
+    ["burner-mining-drill"] = { items_to_place_this = { { name = "burner-mining-drill", count = 1 } } },
+    ["stone-furnace"] = { items_to_place_this = { { name = "stone-furnace", count = 1 } } },
+    ["lab"] = { items_to_place_this = { { name = "lab", count = 1 } } },
+    ["burner-inserter"] = { items_to_place_this = { { name = "burner-inserter", count = 1 } } },
+    ["straight-rail"] = { items_to_place_this = { { name = "rail", count = 1 } } },
+    ["curved-rail-a"] = { items_to_place_this = { { name = "rail", count = 1 } } }
+  }
+}
+
 local function blueprint(label, description, entities)
   return {
     valid_for_read = true,
@@ -48,7 +59,9 @@ item coal 500
 ]], {
         {name = "burner-mining-drill"},
         {name = "stone-furnace"},
-        {name = "stone-furnace"}
+        {name = "stone-furnace"},
+        {name = "straight-rail"},
+        {name = "curved-rail-a"}
       }),
       split_book("Research", [[
 ====== long-pole data-begin ======
@@ -75,16 +88,17 @@ assert(plan:split_count() == 2)
 
 local burner_phase = plan:split_at(1)
 assert(burner_phase.label == "Burner phase")
-assert(burner_phase:entity_count("stone-furnace") == 2)
-assert(burner_phase:entity_count("lab") == 0)
+assert(burner_phase:placement_item_count("stone-furnace") == 2)
+assert(burner_phase:placement_item_count("rail") == 2)
+assert(burner_phase:placement_item_count("lab") == 0)
 assert(burner_phase:extra_item_count("iron-plate") == 10)
 assert(burner_phase:extra_item_count("coal") == 500)
 assert(burner_phase:requires_research("automation"))
 assert(not burner_phase:requires_research("logistics"))
 
 local research = plan:split_at(2)
-assert(research:entity_count("lab") == 2)
-assert(research:entity_count("burner-inserter") == 1)
+assert(research:placement_item_count("lab") == 2)
+assert(research:placement_item_count("burner-inserter") == 1)
 assert(research:extra_item_count("iron-plate") == 0)
 assert(research:requires_research("automation"))
 

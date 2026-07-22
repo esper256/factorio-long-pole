@@ -5,8 +5,8 @@
 --
 -- A split may be one blueprint or one flat blueprint book. In either case, the
 -- top-level split item owns this block; a split book's child blueprints only
--- contribute their entities. Text outside the markers is left for the plan
--- author's notes.
+-- contribute their normalized placement-item requirements. Text outside the
+-- markers is left for the plan author's notes.
 --
 --   ====== long-pole data-begin ======
 --   # Comments and blank lines are ignored.
@@ -32,20 +32,33 @@ local function non_empty_label(page, location)
   return page.label
 end
 
-local function blueprint_entity_counts(page)
+-- Blueprint entity names are an implementation detail of the map. Normalize
+-- them at import to the actual placement items that Factorio says they need:
+-- for example, a curved rail and a straight rail both become rail items.
+local function blueprint_placement_item_counts(page, location)
   local counts = {}
   local entities = page.get_blueprint_entities() or {}
 
   for _, entity in pairs(entities) do
-    counts[entity.name] = (counts[entity.name] or 0) + 1
+    local prototype = prototypes.entity[entity.name]
+    if not prototype then
+      return nil, location .. " contains unknown entity " .. entity.name
+    end
+    -- Factorio uses the first candidate when a construction bot builds it;
+    -- use that same canonical item for a portable, unambiguous plan.
+    local placement_item = prototype.items_to_place_this and prototype.items_to_place_this[1]
+    if not placement_item then
+      return nil, location .. " contains " .. entity.name .. ", which has no placement item"
+    end
+    counts[placement_item.name] = (counts[placement_item.name] or 0) + placement_item.count
   end
 
   return counts
 end
 
-local function add_entity_counts(total, counts)
-  for entity_name, count in pairs(counts) do
-    total[entity_name] = (total[entity_name] or 0) + count
+local function add_placement_item_counts(total, counts)
+  for item_name, count in pairs(counts) do
+    total[item_name] = (total[item_name] or 0) + count
   end
 end
 
@@ -53,14 +66,14 @@ local function read_flat_stack_blueprint(page, location)
   if page.is_blueprint ~= true then
     return nil, location .. " must be a blueprint, not a nested book or planner"
   end
-  return blueprint_entity_counts(page)
+  return blueprint_placement_item_counts(page, location)
 end
 
 local function read_flat_record_blueprint(page, location)
   if page.type ~= "blueprint" then
     return nil, location .. " must be a blueprint, not a nested book or planner"
   end
-  return blueprint_entity_counts(page)
+  return blueprint_placement_item_counts(page, location)
 end
 
 local function read_flat_stack_book(book, location)
@@ -77,7 +90,7 @@ local function read_flat_stack_book(book, location)
       if not page_counts then
         return nil, page_error
       end
-      add_entity_counts(counts, page_counts)
+      add_placement_item_counts(counts, page_counts)
     end
   end
   return counts
@@ -90,7 +103,7 @@ local function read_flat_record_book(book, location)
     if not page_counts then
       return nil, page_error
     end
-    add_entity_counts(counts, page_counts)
+    add_placement_item_counts(counts, page_counts)
   end
   return counts
 end
@@ -104,7 +117,7 @@ local function split_from_book(book, location, counts)
   return {
     label = label,
     description = book.blueprint_description or "",
-    entity_counts = counts
+    placement_item_counts = counts
   }
 end
 
@@ -115,10 +128,14 @@ local function read_stack_split(page, location)
   end
 
   if page.is_blueprint == true then
+    local counts, counts_error = blueprint_placement_item_counts(page, location)
+    if not counts then
+      return nil, counts_error
+    end
     return {
       label = label,
       description = page.blueprint_description or "",
-      entity_counts = blueprint_entity_counts(page)
+      placement_item_counts = counts
     }
   end
   if page.is_blueprint_book == true then
@@ -138,10 +155,14 @@ local function read_record_split(page, location)
   end
 
   if page.type == "blueprint" then
+    local counts, counts_error = blueprint_placement_item_counts(page, location)
+    if not counts then
+      return nil, counts_error
+    end
     return {
       label = label,
       description = page.blueprint_description or "",
-      entity_counts = blueprint_entity_counts(page)
+      placement_item_counts = counts
     }
   end
   if page.type == "blueprint-book" then
@@ -321,7 +342,7 @@ function M.load_book(book)
       return nil, metadata_error
     end
     metadata.label = page.label
-    metadata.entity_counts = page.entity_counts
+    metadata.placement_item_counts = page.placement_item_counts
     splits[index] = metadata
   end
 

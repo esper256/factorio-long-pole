@@ -1,5 +1,7 @@
 -- Compact gameplay HUD for the active speedrun plan. It deliberately knows
 -- only about presentation; runtime state and library traversal stay elsewhere.
+local tri_color_progress_bar = require("hud.tri_color_progress_bar")
+
 local M = {}
 
 local HUD_NAME = "long_pole_speedrun_hud"
@@ -9,6 +11,8 @@ local PREVIOUS_NAME = "previous_split"
 local CURRENT_NAME = "current_split"
 local ADVANCE_SPLIT_BUTTON_NAME = "long_pole_advance_split"
 local NEXT_PLAN_BUTTON_NAME = "long_pole_next_plan"
+local CONSTRUCTION_PROGRESS_NAME = "construction_progress"
+local HUD_WIDTH = 320
 
 local function game_time_caption(tick)
   local total_seconds = math.floor(tick / 60)
@@ -24,6 +28,7 @@ local function build(player)
     name = HUD_NAME,
     direction = "vertical"
   })
+  hud.style.width = HUD_WIDTH
 
   local header = hud.add({
     type = "flow",
@@ -34,6 +39,7 @@ local function build(player)
     type = "label",
     name = PLAN_NAME
   })
+  header[PLAN_NAME].style.horizontally_stretchable = true
   local next_plan_button = header.add({
     type = "sprite-button",
     name = NEXT_PLAN_BUTTON_NAME,
@@ -51,6 +57,7 @@ local function build(player)
     type = "label",
     name = CURRENT_NAME
   })
+  tri_color_progress_bar.add(hud, CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH)
   hud.add({
     type = "button",
     name = ADVANCE_SPLIT_BUTTON_NAME,
@@ -90,12 +97,14 @@ function M.refresh(player, view)
   local plan_name = header[PLAN_NAME]
   local previous = hud[PREVIOUS_NAME]
   local current = hud[CURRENT_NAME]
+  local construction = hud[CONSTRUCTION_PROGRESS_NAME]
   local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
 
   if not view then
     plan_name.caption = "No active speedrun"
     previous.visible = false
     current.visible = false
+    construction.visible = false
     advance_split_button.visible = false
     return
   end
@@ -112,6 +121,11 @@ function M.refresh(player, view)
   end
 
   current.caption = view.current_split_label .. "  " .. game_time_caption(view.game_tick)
+  if view.construction_progress then
+    tri_color_progress_bar.refresh(construction, view.construction_progress)
+  else
+    construction.visible = false
+  end
   advance_split_button.visible = view.next_split_label ~= nil
   advance_split_button.caption = view.next_split_label or ""
 end
