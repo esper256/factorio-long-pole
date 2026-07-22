@@ -5,28 +5,50 @@ local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
 
 local M = {}
 
+local function auto_load_first_plan(player)
+  if speedrun_attempts.get(player.index) then
+    return
+  end
+  local player_setting = settings.get_player_settings(player.index)["long-pole-auto-load-first-plan"]
+  if player_setting and not player_setting.value then
+    return
+  end
+
+  local plan, library_book_index = blueprint_book_plan_loader.load_first_library_book_for_player(player)
+  if plan then
+    speedrun_attempts.start(player.index, plan, library_book_index)
+  end
+end
+
 local function refresh(player)
   local attempt = speedrun_attempts.get(player.index)
   speedrun_hud.refresh(player, attempt and attempt:hud_view(game.tick) or nil)
 end
 
 function M.on_init()
-  -- Initialize the save-local container even when no plan is active.
-  speedrun_attempts.get(1)
+  for _, player in pairs(game.players) do
+    auto_load_first_plan(player)
+    refresh(player)
+  end
 end
 
 function M.on_configuration_changed(_event)
   for _, player in pairs(game.players) do
+    auto_load_first_plan(player)
     refresh(player)
   end
 end
 
 function M.on_player_created(event)
-  refresh(game.get_player(event.player_index))
+  local player = game.get_player(event.player_index)
+  auto_load_first_plan(player)
+  refresh(player)
 end
 
 function M.on_player_joined_game(event)
-  refresh(game.get_player(event.player_index))
+  local player = game.get_player(event.player_index)
+  auto_load_first_plan(player)
+  refresh(player)
 end
 
 function M.on_second_tick(_event)
@@ -49,11 +71,23 @@ function M.load_library_plan(player, library_book_index)
 end
 
 function M.on_gui_click(event)
-  if not event.element.valid or event.element.name ~= speedrun_hud.next_plan_button_name() then
+  if not event.element.valid then
     return
   end
 
   local player = game.get_player(event.player_index)
+  if event.element.name == speedrun_hud.advance_split_button_name() then
+    local attempt = speedrun_attempts.get(player.index)
+    if attempt then
+      attempt:mark_current_split_done(game.tick)
+      refresh(player)
+    end
+    return
+  end
+  if event.element.name ~= speedrun_hud.next_plan_button_name() then
+    return
+  end
+
   local attempt = speedrun_attempts.get(player.index)
   local after_index = attempt and attempt.library_book_index or 0
   local plan, library_book_index = blueprint_book_plan_loader.load_next_library_book_for_player(player, after_index)

@@ -76,6 +76,10 @@ local next_plan, library_book_index = loader.load_next_library_book_for_player(p
 assert(next_plan.label == "Library plan [LP]")
 assert(library_book_index == 2)
 
+local first_plan, first_library_book_index = loader.load_first_library_book_for_player(player)
+assert(first_plan.label == "Library plan [LP]")
+assert(first_library_book_index == 2)
+
 local no_plan = loader.load_next_library_book_for_player(player, 2)
 assert(no_plan == nil)
 assert(printed_messages[1] == "[Long Pole] No later [LP] blueprint book was found in your library.")

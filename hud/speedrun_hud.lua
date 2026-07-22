@@ -2,10 +2,12 @@
 -- only about presentation; runtime state and library traversal stay elsewhere.
 local M = {}
 
-local FRAME_NAME = "long_pole_speedrun_hud"
+local HUD_NAME = "long_pole_speedrun_hud"
+local HEADER_NAME = "speedrun_header"
+local PLAN_NAME = "active_speedrun_name"
 local PREVIOUS_NAME = "previous_split"
 local CURRENT_NAME = "current_split"
-local NEXT_NAME = "next_split"
+local ADVANCE_SPLIT_BUTTON_NAME = "long_pole_advance_split"
 local NEXT_PLAN_BUTTON_NAME = "long_pole_next_plan"
 
 local function game_time_caption(tick)
@@ -17,46 +19,62 @@ local function game_time_caption(tick)
 end
 
 local function build(player)
-  local frame = player.gui.left.add({
-    type = "frame",
-    name = FRAME_NAME,
-    direction = "vertical",
-    caption = "Long Pole"
+  local hud = player.gui.left.add({
+    type = "flow",
+    name = HUD_NAME,
+    direction = "vertical"
   })
-  frame.style.minimal_width = 220
 
-  frame.add({
+  local header = hud.add({
+    type = "flow",
+    name = HEADER_NAME,
+    direction = "horizontal"
+  })
+  header.add({
+    type = "label",
+    name = PLAN_NAME
+  })
+  local next_plan_button = header.add({
+    type = "sprite-button",
+    name = NEXT_PLAN_BUTTON_NAME,
+    sprite = "utility/right_arrow",
+    tooltip = "Load the next [LP] blueprint book in your library."
+  })
+  next_plan_button.style.width = 24
+  next_plan_button.style.height = 24
+
+  hud.add({
     type = "label",
     name = PREVIOUS_NAME
   })
-  frame.add({
+  hud.add({
     type = "label",
     name = CURRENT_NAME
   })
-  frame.add({
-    type = "label",
-    name = NEXT_NAME
-  })
-  frame.add({
+  hud.add({
     type = "button",
-    name = NEXT_PLAN_BUTTON_NAME,
-    caption = "Next plan",
-    tooltip = "Load the next [LP] blueprint book in your library."
+    name = ADVANCE_SPLIT_BUTTON_NAME,
+    style = "transparent_button",
+    tooltip = "Mark the current split complete."
   })
 
-  return frame
+  return hud
 end
 
 function M.next_plan_button_name()
   return NEXT_PLAN_BUTTON_NAME
 end
 
+function M.advance_split_button_name()
+  return ADVANCE_SPLIT_BUTTON_NAME
+end
+
 function M.is_visible(player)
-  return player.gui.left[FRAME_NAME] ~= nil
+  return player.gui.left[HUD_NAME] ~= nil
 end
 
 function M.hide(player)
-  local existing = player.gui.left[FRAME_NAME]
+  local existing = player.gui.left[HUD_NAME]
   if existing then
     existing.destroy()
   end
@@ -66,27 +84,36 @@ function M.refresh(player, view)
   if not (player and player.valid) then
     return
   end
+
+  local hud = player.gui.left[HUD_NAME] or build(player)
+  local header = hud[HEADER_NAME]
+  local plan_name = header[PLAN_NAME]
+  local previous = hud[PREVIOUS_NAME]
+  local current = hud[CURRENT_NAME]
+  local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
+
   if not view then
-    M.hide(player)
+    plan_name.caption = "No active speedrun"
+    previous.visible = false
+    current.visible = false
+    advance_split_button.visible = false
     return
   end
 
-  local frame = player.gui.left[FRAME_NAME] or build(player)
-  local previous = frame[PREVIOUS_NAME]
-  local current = frame[CURRENT_NAME]
-  local next_split = frame[NEXT_NAME]
+  plan_name.caption = view.plan_label
+  current.visible = true
 
   if view.previous_split_label then
     previous.visible = true
-    previous.caption = "Previous: " .. view.previous_split_label
+    previous.caption = view.previous_split_label
       .. "  " .. game_time_caption(view.previous_split_finished_tick)
   else
     previous.visible = false
   end
 
-  current.caption = "Current: " .. view.current_split_label
-    .. "  " .. game_time_caption(view.game_tick)
-  next_split.caption = "Next: " .. (view.next_split_label or "—")
+  current.caption = view.current_split_label .. "  " .. game_time_caption(view.game_tick)
+  advance_split_button.visible = view.next_split_label ~= nil
+  advance_split_button.caption = view.next_split_label or ""
 end
 
 return M

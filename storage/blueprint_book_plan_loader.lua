@@ -32,14 +32,6 @@ local function non_empty_label(page, location)
   return page.label
 end
 
-local function is_blueprint(page)
-  return page.is_blueprint == true or page.type == "blueprint"
-end
-
-local function is_blueprint_book(page)
-  return page.is_blueprint_book == true or page.type == "blueprint-book"
-end
-
 local function blueprint_entity_counts(page)
   local counts = {}
   local entities = page.get_blueprint_entities() or {}
@@ -57,8 +49,15 @@ local function add_entity_counts(total, counts)
   end
 end
 
-local function read_flat_blueprint(page, location)
-  if not is_blueprint(page) then
+local function read_flat_stack_blueprint(page, location)
+  if page.is_blueprint ~= true then
+    return nil, location .. " must be a blueprint, not a nested book or planner"
+  end
+  return blueprint_entity_counts(page)
+end
+
+local function read_flat_record_blueprint(page, location)
+  if page.type ~= "blueprint" then
     return nil, location .. " must be a blueprint, not a nested book or planner"
   end
   return blueprint_entity_counts(page)
@@ -74,7 +73,7 @@ local function read_flat_stack_book(book, location)
   for index = 1, #inventory do
     local page = inventory[index]
     if page.valid_for_read then
-      local page_counts, page_error = read_flat_blueprint(page, location .. " page " .. index)
+      local page_counts, page_error = read_flat_stack_blueprint(page, location .. " page " .. index)
       if not page_counts then
         return nil, page_error
       end
@@ -87,7 +86,7 @@ end
 local function read_flat_record_book(book, location)
   local counts = {}
   for index, page in pairs(book.contents) do
-    local page_counts, page_error = read_flat_blueprint(page, location .. " page " .. index)
+    local page_counts, page_error = read_flat_record_blueprint(page, location .. " page " .. index)
     if not page_counts then
       return nil, page_error
     end
@@ -96,20 +95,10 @@ local function read_flat_record_book(book, location)
   return counts
 end
 
-local function read_split_book(book, location)
+local function split_from_book(book, location, counts)
   local label, label_error = non_empty_label(book, location)
   if not label then
     return nil, label_error
-  end
-
-  local counts, counts_error
-  if book.type ~= nil then
-    counts, counts_error = read_flat_record_book(book, location)
-  else
-    counts, counts_error = read_flat_stack_book(book, location)
-  end
-  if not counts then
-    return nil, counts_error
   end
 
   return {
@@ -119,21 +108,48 @@ local function read_split_book(book, location)
   }
 end
 
-local function read_split(page, location)
+local function read_stack_split(page, location)
   local label, label_error = non_empty_label(page, location)
   if not label then
     return nil, label_error
   end
 
-  if is_blueprint(page) then
+  if page.is_blueprint == true then
     return {
       label = label,
       description = page.blueprint_description or "",
       entity_counts = blueprint_entity_counts(page)
     }
   end
-  if is_blueprint_book(page) then
-    return read_split_book(page, location)
+  if page.is_blueprint_book == true then
+    local counts, counts_error = read_flat_stack_book(page, location)
+    if not counts then
+      return nil, counts_error
+    end
+    return split_from_book(page, location, counts)
+  end
+  return nil, location .. " must be a blueprint or a flat blueprint book"
+end
+
+local function read_record_split(page, location)
+  local label, label_error = non_empty_label(page, location)
+  if not label then
+    return nil, label_error
+  end
+
+  if page.type == "blueprint" then
+    return {
+      label = label,
+      description = page.blueprint_description or "",
+      entity_counts = blueprint_entity_counts(page)
+    }
+  end
+  if page.type == "blueprint-book" then
+    local counts, counts_error = read_flat_record_book(page, location)
+    if not counts then
+      return nil, counts_error
+    end
+    return split_from_book(page, location, counts)
   end
   return nil, location .. " must be a blueprint or a flat blueprint book"
 end
@@ -152,7 +168,7 @@ local function read_stack_book(book)
   for index = 1, #inventory do
     local page = inventory[index]
     if page.valid_for_read then
-      local split, page_error = read_split(page, "book page " .. index)
+      local split, page_error = read_stack_split(page, "book page " .. index)
       if not split then
         return nil, page_error
       end
@@ -176,7 +192,7 @@ local function read_record_book(book)
 
   local pages = {}
   for _, index in ipairs(indexes) do
-    local split, page_error = read_split(book.contents[index], "book page " .. index)
+    local split, page_error = read_record_split(book.contents[index], "book page " .. index)
     if not split then
       return nil, page_error
     end
@@ -187,6 +203,12 @@ local function read_record_book(book)
 end
 
 local function read_book(book)
+  if book.object_name ~= nil then
+    if book.object_name == "LuaRecord" then
+      return read_record_book(book)
+    end
+    return read_stack_book(book)
+  end
   if book.type ~= nil then
     return read_record_book(book)
   end
@@ -331,6 +353,22 @@ function M.load_next_library_book_for_player(player, after_index)
   end
 
   player.print("[Long Pole] No later [LP] blueprint book was found in your library.")
+  return nil
+end
+
+-- Loads the first marked book without printing when the player simply has no
+-- plans yet. A malformed marked book still reports its actionable error.
+function M.load_first_library_book_for_player(player)
+  for index = 1, #player.blueprints do
+    local book = player.blueprints[index]
+    if M.is_speedrun_plan_book(book) then
+      local plan, load_error = M.load_book_for_player(player, book)
+      if not plan then
+        return nil, nil, load_error
+      end
+      return plan, index
+    end
+  end
   return nil
 end
 
