@@ -1,6 +1,7 @@
 -- Compact gameplay HUD for the active speedrun plan. It deliberately knows
 -- only about presentation; runtime state and library traversal stay elsewhere.
 local tri_color_progress_bar = require("hud.tri_color_progress_bar")
+local icon_quantity_list = require("hud.icon_quantity_list")
 
 local M = {}
 
@@ -14,6 +15,9 @@ local NEXT_PLAN_BUTTON_NAME = "long_pole_next_plan"
 local CONSTRUCTION_PROGRESS_NAME = "construction_progress"
 local RESEARCH_PROGRESS_NAME = "research_progress"
 local EXTRA_ITEM_PROGRESS_NAME = "extra_item_progress"
+local CONSTRUCTION_SHORTFALLS_NAME = "construction_shortfalls"
+local RESEARCH_SHORTFALLS_NAME = "research_shortfalls"
+local EXTRA_ITEM_SHORTFALLS_NAME = "extra_item_shortfalls"
 local HUD_WIDTH = 320
 
 local function game_time_caption(tick)
@@ -60,8 +64,11 @@ local function build(player)
     name = CURRENT_NAME
   })
   tri_color_progress_bar.add(hud, CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH)
+  icon_quantity_list.add(hud, CONSTRUCTION_SHORTFALLS_NAME, HUD_WIDTH)
   tri_color_progress_bar.add(hud, RESEARCH_PROGRESS_NAME, HUD_WIDTH)
+  icon_quantity_list.add(hud, RESEARCH_SHORTFALLS_NAME, HUD_WIDTH)
   tri_color_progress_bar.add(hud, EXTRA_ITEM_PROGRESS_NAME, HUD_WIDTH)
+  icon_quantity_list.add(hud, EXTRA_ITEM_SHORTFALLS_NAME, HUD_WIDTH)
   hud.add({
     type = "button",
     name = ADVANCE_SPLIT_BUTTON_NAME,
@@ -104,6 +111,9 @@ function M.refresh(player, view)
   local construction = hud[CONSTRUCTION_PROGRESS_NAME]
   local research = hud[RESEARCH_PROGRESS_NAME]
   local extra_items = hud[EXTRA_ITEM_PROGRESS_NAME]
+  local construction_shortfalls = hud[CONSTRUCTION_SHORTFALLS_NAME]
+  local research_shortfalls = hud[RESEARCH_SHORTFALLS_NAME]
+  local extra_item_shortfalls = hud[EXTRA_ITEM_SHORTFALLS_NAME]
   local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
 
   if not view then
@@ -113,6 +123,9 @@ function M.refresh(player, view)
     construction.visible = false
     research.visible = false
     extra_items.visible = false
+    construction_shortfalls.visible = false
+    research_shortfalls.visible = false
+    extra_item_shortfalls.visible = false
     advance_split_button.visible = false
     return
   end
@@ -131,18 +144,24 @@ function M.refresh(player, view)
   current.caption = view.current_split_label .. "  " .. game_time_caption(view.game_tick)
   if view.construction_progress then
     tri_color_progress_bar.refresh(construction, view.construction_progress)
+    icon_quantity_list.refresh(construction_shortfalls, view.construction_progress.unfinished_items)
   else
     construction.visible = false
+    construction_shortfalls.visible = false
   end
   if view.research_progress then
     tri_color_progress_bar.refresh(research, view.research_progress)
+    icon_quantity_list.refresh(research_shortfalls, view.research_progress.unfinished_items)
   else
     research.visible = false
+    research_shortfalls.visible = false
   end
   if view.extra_item_progress then
     tri_color_progress_bar.refresh(extra_items, view.extra_item_progress)
+    icon_quantity_list.refresh(extra_item_shortfalls, view.extra_item_progress.unfinished_items)
   else
     extra_items.visible = false
+    extra_item_shortfalls.visible = false
   end
   advance_split_button.visible = view.next_split_label ~= nil
   advance_split_button.caption = view.next_split_label or ""

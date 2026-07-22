@@ -16,7 +16,7 @@ local plan = speedrun_plan.new("Practice [LP]", {
 local state = game_state.new()
 local nauvis = game_state.surface(state, "nauvis")
 nauvis:record_products_produced({
-  ["automation-science-pack"] = 20,
+  ["automation-science-pack"] = 3,
   ["logistic-science-pack"] = 5
 })
 game_state.set_research(state, "automation", false, 0.5)
@@ -43,5 +43,7 @@ local force = {
 local progress = research_progress.for_split(plan:split_at(1), state, force)
 assert(progress.total == 30)
 assert(progress.done == 25)
-assert(progress.pending == 5)
-assert(progress.tooltip == "Research: 25 complete · 5 science ready · 0 remaining")
+assert(progress.pending == 3)
+assert(progress.tooltip == "Research: 25 complete · 3 science ready · 2 remaining")
+assert(progress.unfinished_items[1].item_name == "automation-science-pack")
+assert(progress.unfinished_items[1].count == 2)
