@@ -54,6 +54,12 @@ hud.refresh(player, {
     done = 5,
     pending = 10,
     tooltip = "Research: 5 complete · 10 science ready · 5 remaining"
+  },
+  extra_item_progress = {
+    total = 12,
+    done = 7,
+    pending = 0,
+    tooltip = "Extra items: 7 ready · 5 remaining"
   }
 })
 
@@ -74,6 +80,10 @@ assert(hud_element.research_progress.done.style.width == 80)
 assert(hud_element.research_progress.pending.style.width == 160)
 assert(hud_element.research_progress.not_started.style.width == 80)
 assert(hud_element.research_progress.tooltip == "Research: 5 complete · 10 science ready · 5 remaining")
+assert(hud_element.extra_item_progress.done.style.width == 186)
+assert(hud_element.extra_item_progress.pending.visible == false)
+assert(hud_element.extra_item_progress.not_started.style.width == 134)
+assert(hud_element.extra_item_progress.tooltip == "Extra items: 7 ready · 5 remaining")
 
 hud.refresh(player, {
   plan_label = "Any% practice",

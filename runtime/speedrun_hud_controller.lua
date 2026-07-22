@@ -3,6 +3,7 @@ local speedrun_hud = require("hud.speedrun_hud")
 local speedrun_attempts = require("runtime_state.speedrun_attempts")
 local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
 local construction_progress = require("progress_analysis.construction_progress")
+local extra_item_progress = require("progress_analysis.extra_item_progress")
 local research_progress = require("progress_analysis.research_progress")
 local split_completion = require("progress_analysis.split_completion")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
@@ -45,6 +46,7 @@ local function view_for_attempt(attempt, state)
       attempt.split_start_placed_product_counts
     )
     view.research_progress = research_progress.for_split(split, state, game.forces.player)
+    view.extra_item_progress = extra_item_progress.for_split(split, state)
   end
   return view
 end
@@ -65,7 +67,11 @@ local function refresh(player)
   local view = view_for_attempt(attempt, state)
   if auto_advance_enabled(player)
     and view.next_split_label ~= nil
-    and split_completion.is_complete({ view.construction_progress, view.research_progress }) then
+    and split_completion.is_complete({
+      view.construction_progress,
+      view.research_progress,
+      view.extra_item_progress
+    }) then
     attempt:mark_current_split_done(game.tick, state)
     view = view_for_attempt(attempt, state)
   end
