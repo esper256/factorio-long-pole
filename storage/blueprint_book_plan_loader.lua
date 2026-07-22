@@ -313,6 +313,15 @@ local function parse_metadata(description, split_label)
   return metadata
 end
 
+local function validate_research_technologies(metadata, split_label)
+  for technology_name in pairs(metadata.research_technologies) do
+    if not prototypes.technology[technology_name] then
+      return nil, split_label .. " requires unknown technology " .. technology_name
+    end
+  end
+  return true
+end
+
 function M.is_speedrun_plan_book(book)
   return book ~= nil
     and type(book.label) == "string"
@@ -340,6 +349,10 @@ function M.load_book(book)
     local metadata, metadata_error = parse_metadata(page.description, page.label)
     if not metadata then
       return nil, metadata_error
+    end
+    local valid_research, research_error = validate_research_technologies(metadata, page.label)
+    if not valid_research then
+      return nil, research_error
     end
     metadata.label = page.label
     metadata.placement_item_counts = page.placement_item_counts

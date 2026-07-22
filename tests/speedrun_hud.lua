@@ -48,6 +48,12 @@ hud.refresh(player, {
     done = 4,
     pending = 3,
     tooltip = "Construction: 4 placed · 3 ready to place · 3 remaining"
+  },
+  research_progress = {
+    total = 20,
+    done = 5,
+    pending = 10,
+    tooltip = "Research: 5 complete · 10 science ready · 5 remaining"
   }
 })
 
@@ -62,7 +68,12 @@ assert(header.long_pole_next_plan.sprite == "utility/right_arrow")
 assert(hud_element.construction_progress.done.style.width == 128)
 assert(hud_element.construction_progress.pending.style.width == 96)
 assert(hud_element.construction_progress.not_started.style.width == 96)
+assert(hud_element.construction_progress.done.style.bar_width == 6)
 assert(hud_element.construction_progress.tooltip == "Construction: 4 placed · 3 ready to place · 3 remaining")
+assert(hud_element.research_progress.done.style.width == 80)
+assert(hud_element.research_progress.pending.style.width == 160)
+assert(hud_element.research_progress.not_started.style.width == 80)
+assert(hud_element.research_progress.tooltip == "Research: 5 complete · 10 science ready · 5 remaining")
 
 hud.refresh(player, {
   plan_label = "Any% practice",

@@ -13,6 +13,9 @@ prototypes = {
     ["burner-inserter"] = { items_to_place_this = { { name = "burner-inserter", count = 1 } } },
     ["straight-rail"] = { items_to_place_this = { { name = "rail", count = 1 } } },
     ["curved-rail-a"] = { items_to_place_this = { { name = "rail", count = 1 } } }
+  },
+  technology = {
+    automation = {}
   }
 }
 
@@ -152,3 +155,21 @@ local nested_book = {
 local nested_plan, nested_error = loader.load_book(nested_book)
 assert(nested_plan == nil)
 assert(nested_error == "book page 1 page 1 must be a blueprint, not a nested book or planner")
+
+local unknown_research_book = {
+  is_blueprint_book = true,
+  label = "Unknown technology [LP]",
+  get_inventory = function()
+    return {
+      blueprint("Bad research", [[
+====== long-pole data-begin ======
+research definitely-not-a-technology
+====== long-pole data-end ======
+]], {})
+    }
+  end
+}
+
+local unknown_research_plan, unknown_research_error = loader.load_book(unknown_research_book)
+assert(unknown_research_plan == nil)
+assert(unknown_research_error == "Bad research requires unknown technology definitely-not-a-technology")

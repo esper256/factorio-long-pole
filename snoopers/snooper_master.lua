@@ -35,6 +35,11 @@ local configured_snoopers = {
     name = "production_statistics",
     enabled = true,
     module = require("snoopers.production_statistics")
+  },
+  {
+    name = "research",
+    enabled = true,
+    module = require("snoopers.research")
   }
 }
 

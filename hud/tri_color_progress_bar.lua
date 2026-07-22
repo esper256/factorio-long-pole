@@ -18,7 +18,7 @@ local function add_segment(parent, name, color)
     name = name,
     value = 1
   })
-  segment.style.bar_width = 4
+  segment.style.bar_width = 6
   segment.style.margin = 0
   segment.style.padding = 0
   segment.style.color = color

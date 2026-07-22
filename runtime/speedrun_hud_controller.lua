@@ -3,6 +3,7 @@ local speedrun_hud = require("hud.speedrun_hud")
 local speedrun_attempts = require("runtime_state.speedrun_attempts")
 local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
 local construction_progress = require("progress_analysis.construction_progress")
+local research_progress = require("progress_analysis.research_progress")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
 local M = {}
@@ -39,6 +40,7 @@ local function refresh(player)
       state,
       attempt.split_start_placed_product_counts
     )
+    view.research_progress = research_progress.for_split(split, state, game.forces.player)
   end
   speedrun_hud.refresh(player, view)
 end

@@ -12,6 +12,7 @@ local CURRENT_NAME = "current_split"
 local ADVANCE_SPLIT_BUTTON_NAME = "long_pole_advance_split"
 local NEXT_PLAN_BUTTON_NAME = "long_pole_next_plan"
 local CONSTRUCTION_PROGRESS_NAME = "construction_progress"
+local RESEARCH_PROGRESS_NAME = "research_progress"
 local HUD_WIDTH = 320
 
 local function game_time_caption(tick)
@@ -58,6 +59,7 @@ local function build(player)
     name = CURRENT_NAME
   })
   tri_color_progress_bar.add(hud, CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH)
+  tri_color_progress_bar.add(hud, RESEARCH_PROGRESS_NAME, HUD_WIDTH)
   hud.add({
     type = "button",
     name = ADVANCE_SPLIT_BUTTON_NAME,
@@ -98,6 +100,7 @@ function M.refresh(player, view)
   local previous = hud[PREVIOUS_NAME]
   local current = hud[CURRENT_NAME]
   local construction = hud[CONSTRUCTION_PROGRESS_NAME]
+  local research = hud[RESEARCH_PROGRESS_NAME]
   local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
 
   if not view then
@@ -105,6 +108,7 @@ function M.refresh(player, view)
     previous.visible = false
     current.visible = false
     construction.visible = false
+    research.visible = false
     advance_split_button.visible = false
     return
   end
@@ -125,6 +129,11 @@ function M.refresh(player, view)
     tri_color_progress_bar.refresh(construction, view.construction_progress)
   else
     construction.visible = false
+  end
+  if view.research_progress then
+    tri_color_progress_bar.refresh(research, view.research_progress)
+  else
+    research.visible = false
   end
   advance_split_button.visible = view.next_split_label ~= nil
   advance_split_button.caption = view.next_split_label or ""

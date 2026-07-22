@@ -5,6 +5,9 @@ prototypes = {
     ["burner-mining-drill"] = { items_to_place_this = { { name = "burner-mining-drill", count = 1 } } },
     ["lab"] = { items_to_place_this = { { name = "lab", count = 1 } } },
     ["burner-inserter"] = { items_to_place_this = { { name = "burner-inserter", count = 1 } } }
+  },
+  technology = {
+    automation = {}
   }
 }
 
