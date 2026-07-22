@@ -8,11 +8,13 @@ local M = {}
 
 M.example_plan_description = [[format=long-pole-plan;version=1
 plan_id=plan-42
+plan_name=Any% Practice Plan
 visibility=references-only
 default_surface=nauvis
 ]]
 
 M.example_split_description = [[format=long-pole-split;version=1
+split_name=Starter Burners
 surface=nauvis
 
 --- Extra Items ---
@@ -150,6 +152,7 @@ local function export_plan_description(data)
   }
 
   append_key_value(lines, "plan_id", data.plan_id)
+  append_key_value(lines, "plan_name", data.plan_name)
   append_key_value(lines, "visibility", data.visibility or "references-only")
   append_key_value(lines, "default_surface", data.default_surface)
 
@@ -158,11 +161,13 @@ end
 
 local function export_split_description(data)
   local lines = {
-    serialize_header("long-pole-split", 1),
-    ("surface=%s"):format(data.surface or "nauvis"),
-    "",
-    "--- Extra Items ---"
+    serialize_header("long-pole-split", 1)
   }
+
+  append_key_value(lines, "split_name", data.split_name or data.name)
+  lines[#lines + 1] = ("surface=%s"):format(data.surface or "nauvis")
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "--- Extra Items ---"
 
   for _, item in ipairs(normalize_items(data.items)) do
     lines[#lines + 1] = ("%s=%d"):format(item.name, item.count)
@@ -292,6 +297,7 @@ local function import_plan_description(lines, header)
     format = header.format,
     version = header.version,
     plan_id = root.plan_id,
+    plan_name = root.plan_name,
     visibility = root.visibility or "references-only",
     default_surface = root.default_surface or "nauvis"
   }
@@ -339,6 +345,8 @@ local function import_split_description(lines, header)
   return {
     format = header.format,
     version = header.version,
+    split_name = root.split_name,
+    name = root.split_name,
     surface = root.surface or "nauvis",
     items = items,
     technologies = technologies,

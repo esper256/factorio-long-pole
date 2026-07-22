@@ -141,39 +141,6 @@ describe("plan_storage", function()
     return record
   end
 
-  local function with_mocked_label_imports(label_by_export, callback)
-    local previous_game = rawget(_G, "game")
-    _G.game = {
-      create_inventory = function(_size)
-        local stack = {
-          valid = true,
-          label = nil
-        }
-
-        function stack.import_stack(data)
-          stack.label = label_by_export[data]
-          return stack.label and 0 or 1
-        end
-
-        return setmetatable({
-          [1] = stack
-        }, {
-          __index = {
-            destroy = function() end
-          }
-        })
-      end
-    }
-
-    local ok, result = pcall(callback)
-    _G.game = previous_game
-    if not ok then
-      error(result)
-    end
-
-    return result
-  end
-
   it("decodes a nested book plan format from descriptions", function()
     local slot_count = 5
     local plan_book = make_stack(slot_count)
@@ -181,6 +148,7 @@ describe("plan_storage", function()
     plan_book.label = "Any% Practice Plan"
     plan_book.blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-42
+plan_name=Any% Practice Plan
 visibility=references-only
 default_surface=nauvis
 ]]
@@ -189,6 +157,7 @@ default_surface=nauvis
     assert.is_true(split_book.set_stack({name = "blueprint-book"}))
     split_book.label = "Starter Burners"
     split_book.blueprint_description = [[format=long-pole-split;version=1
+split_name=Starter Burners
 surface=nauvis
 
 --- Extra Items ---
@@ -269,6 +238,7 @@ blueprint_fingerprint=burner-mining-drill:2;stone-furnace:2
     plan_book.label = "Gap Test Plan"
     plan_book.blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-gap
+plan_name=Gap Test Plan
 visibility=references-only
 default_surface=nauvis
 ]]
@@ -277,6 +247,7 @@ default_surface=nauvis
     assert.is_true(first_split.set_stack({name = "blueprint-book"}))
     first_split.label = "First Split"
     first_split.blueprint_description = [[format=long-pole-split;version=1
+split_name=First Split
 surface=nauvis
 
 --- Extra Items ---
@@ -331,6 +302,7 @@ blueprint_fingerprint=stone-furnace:2
     assert.is_true(second_split.set_stack({name = "blueprint-book"}))
     second_split.label = "Second Split"
     second_split.blueprint_description = [[format=long-pole-split;version=1
+split_name=Second Split
 surface=gleba
 
 --- Extra Items ---
@@ -392,6 +364,7 @@ Second notes.
     assert.are.equal("Untitled Plan", cursor_stack.label)
     assert.are.equal([[format=long-pole-plan;version=1
 plan_id=plan-1
+plan_name=Untitled Plan
 visibility=references-only
 default_surface=nauvis
 ]], cursor_stack.blueprint_description)
@@ -401,6 +374,7 @@ default_surface=nauvis
     assert.is_true(split_book.is_blueprint_book)
     assert.are.equal("Starter Burners", split_book.label)
     assert.are.equal([[format=long-pole-split;version=1
+split_name=Starter Burners
 surface=nauvis
 
 --- Extra Items ---
@@ -482,6 +456,7 @@ blueprint_fingerprint=burner-mining-drill:2;stone-furnace:2
     imported_book.label = "Imported Plan"
     imported_book.blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-imported
+plan_name=Imported Plan
 visibility=references-only
 default_surface=gleba
 ]]
@@ -490,6 +465,7 @@ default_surface=gleba
     assert.is_true(split_book.set_stack({name = "blueprint-book"}))
     split_book.label = "Imported Split"
     split_book.blueprint_description = [[format=long-pole-split;version=1
+split_name=Imported Split
 surface=gleba
 
 --- Extra Items ---
@@ -541,6 +517,7 @@ Imported notes.
         label = "Record Imported Plan",
         blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-record
+plan_name=Record Imported Plan
 visibility=references-only
 default_surface=nauvis
 ]],
@@ -549,6 +526,7 @@ default_surface=nauvis
             type = "blueprint-book",
             label = "Record Split",
             blueprint_description = [[format=long-pole-split;version=1
+split_name=Record Split
 surface=nauvis
 
 --- Extra Items ---
@@ -595,6 +573,7 @@ From record.
           label = "Auto Imported Plan",
           blueprint_description = [[format=long-pole-plan;version=1
 plan_id=auto-imported
+plan_name=Auto Imported Plan
 visibility=references-only
 default_surface=nauvis
 ]],
@@ -603,6 +582,7 @@ default_surface=nauvis
               type = "blueprint-book",
               label = "Auto Imported Split",
               blueprint_description = [[format=long-pole-split;version=1
+split_name=Auto Imported Split
 surface=nauvis
 
 --- Extra Items ---
@@ -622,6 +602,7 @@ From auto import.
           label = "Later Plan",
           blueprint_description = [[format=long-pole-plan;version=1
 plan_id=later-plan
+plan_name=Later Plan
 visibility=references-only
 default_surface=nauvis
 ]],
@@ -658,6 +639,7 @@ default_surface=nauvis
               label = "Shared Imported Plan",
               blueprint_description = [[format=long-pole-plan;version=1
 plan_id=shared-plan
+plan_name=Shared Imported Plan
 visibility=references-only
 default_surface=nauvis
 ]],
@@ -666,6 +648,7 @@ default_surface=nauvis
                   type = "blueprint-book",
                   label = "Shared Imported Split",
                   blueprint_description = [[format=long-pole-split;version=1
+split_name=Shared Imported Split
 surface=nauvis
 
 --- Extra Items ---
@@ -694,7 +677,7 @@ From shared library.
     assert.are.equal("Shared Imported Split", state.splits[1].name)
   end)
 
-  it("falls back to default plan and split names when record labels are unavailable", function()
+  it("falls back to stored metadata names when record labels are unavailable", function()
     local state = {}
     tracker.init(state)
     plan_storage.create_new_plan(state)
@@ -707,6 +690,7 @@ From shared library.
         type = "blueprint-book",
         blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-record-export
+plan_name=Recovered Record Plan
 visibility=references-only
 default_surface=nauvis
 ]],
@@ -714,6 +698,7 @@ default_surface=nauvis
           [1] = make_record({
             type = "blueprint-book",
             blueprint_description = [[format=long-pole-split;version=1
+split_name=Recovered Record Split
 surface=nauvis
 
 --- Extra Items ---
@@ -733,7 +718,7 @@ Recovered from export.
 
     assert.is_true(ok)
     assert.is_nil(error_message)
-    assert.are.equal("Untitled Plan", state.plan_name)
-    assert.are.equal("Split 1", state.splits[1].name)
+    assert.are.equal("Recovered Record Plan", state.plan_name)
+    assert.are.equal("Recovered Record Split", state.splits[1].name)
   end)
 end)

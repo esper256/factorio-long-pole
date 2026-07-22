@@ -5,6 +5,7 @@ describe("description_codec", function()
     local description = assert(codec.export_to_description({
       format = "long-pole-plan",
       plan_id = "plan-42",
+      plan_name = "Any% Practice Plan",
       visibility = "references-only",
       default_surface = "nauvis"
     }))
@@ -15,6 +16,7 @@ describe("description_codec", function()
   it("exports split descriptions", function()
     local description = assert(codec.export_to_description({
       format = "long-pole-split",
+      split_name = "Starter Burners",
       surface = "nauvis",
       items = {
         {name = "transport-belt", count = 200},
@@ -55,6 +57,7 @@ describe("description_codec", function()
       format = "long-pole-plan",
       version = 1,
       plan_id = "plan-42",
+      plan_name = "Any% Practice Plan",
       visibility = "references-only",
       default_surface = "nauvis"
     }, decoded)
@@ -66,6 +69,8 @@ describe("description_codec", function()
     assert.same({
       format = "long-pole-split",
       version = 1,
+      split_name = "Starter Burners",
+      name = "Starter Burners",
       surface = "nauvis",
       items = {
         {name = "transport-belt", count = 200},

@@ -28,6 +28,7 @@ local PROGRESS_SNOOPER_EVENT_IDS = {
 
 local AUTO_IMPORT_FIRST_PLAN_SETTING = "long-pole-auto-import-first-plan-on-new-game"
 local AUTO_IMPORT_RETRY_WINDOW_TICKS = 600
+local register_debug_commands
 
 local function refresh_split_viewer_for_player(player)
   if not (player and player.valid) then
@@ -88,6 +89,7 @@ local function initialize_state()
 end
 
 local function on_runtime_initialized()
+  register_debug_commands()
   initialize_state()
   refresh_all_players(true)
 end
@@ -172,8 +174,16 @@ local function run_gui_smoke_actions(player)
   storage.gui_smoke_actions_completed[player.index] = true
 end
 
+register_debug_commands = function()
+  -- Keep one registration hook so future debug commands have a single place to
+  -- attach, but do not leave exploratory record-dump commands in the shipped
+  -- runtime once they have served their purpose.
+end
+
 script.on_init(on_runtime_initialized)
 script.on_configuration_changed(on_runtime_initialized)
+script.on_load(register_debug_commands)
+register_debug_commands()
 
 script.on_event(defines.events.on_player_created, function(event)
   local player = game.get_player(event.player_index)

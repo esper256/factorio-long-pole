@@ -95,39 +95,6 @@ describe("split_viewer", function()
     }
   end
 
-  local function with_mocked_label_imports(label_by_export, callback)
-    local previous_game = rawget(_G, "game")
-    _G.game = {
-      create_inventory = function(_size)
-        local stack = {
-          valid = true,
-          label = nil
-        }
-
-        function stack.import_stack(data)
-          stack.label = label_by_export[data]
-          return stack.label and 0 or 1
-        end
-
-        return setmetatable({
-          [1] = stack
-        }, {
-          __index = {
-            destroy = function() end
-          }
-        })
-      end
-    }
-
-    local ok, result = pcall(callback)
-    _G.game = previous_game
-    if not ok then
-      error(result)
-    end
-
-    return result
-  end
-
   it("imports from a held blueprint library record without opening the editor", function()
     local opened_with_plan_name = nil
     local printed_message = nil
@@ -151,6 +118,7 @@ describe("split_viewer", function()
         type = "blueprint-book",
         blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-click-import
+plan_name=Imported From Record
 visibility=references-only
 default_surface=nauvis
 ]],
@@ -159,6 +127,7 @@ default_surface=nauvis
             valid = true,
             type = "blueprint-book",
             blueprint_description = [[format=long-pole-split;version=1
+split_name=Imported Split
 surface=nauvis
 
 --- Extra Items ---
@@ -207,8 +176,8 @@ Imported from click.
 
     assert.is_true(handled)
     assert.is_nil(printed_message)
-    assert.are.equal("Untitled Plan", state.plan_name)
-    assert.are.equal("Split 1", state.splits[1].name)
+    assert.are.equal("Imported From Record", state.plan_name)
+    assert.are.equal("Imported Split", state.splits[1].name)
     assert.is_nil(opened_with_plan_name)
 
     package.loaded["gui.plan_editor"] = original_plan_editor
@@ -295,6 +264,7 @@ Imported from click.
     imported_book.label = "Imported Plan"
     imported_book.blueprint_description = [[format=long-pole-plan;version=1
 plan_id=plan-imported
+plan_name=Imported Plan
 visibility=references-only
 default_surface=nauvis
 ]]
@@ -303,6 +273,7 @@ default_surface=nauvis
     assert.is_true(split_book.set_stack({name = "blueprint-book"}))
     split_book.label = "Imported Split"
     split_book.blueprint_description = [[format=long-pole-split;version=1
+split_name=Imported Split
 surface=nauvis
 
 --- Extra Items ---

@@ -92,6 +92,11 @@ local function source_label(source)
   if label then
     return label
   end
+
+  -- Blueprint-book names should come from the live stack/record label itself.
+  -- Do not import/export records through temporary inventories to recover names:
+  -- that would be a hack around the API shape and would blur the boundary
+  -- between lightweight blueprint symlinks and copied blueprint payloads.
   return nil
 end
 
@@ -189,7 +194,7 @@ local function find_plan_metadata_from_item_stack(item_stack)
     return nil
   end
 
-  metadata.plan_name = source_label(item_stack) or DEFAULT_PLAN_NAME
+  metadata.plan_name = source_label(item_stack) or metadata.plan_name or DEFAULT_PLAN_NAME
   return metadata
 end
 
@@ -270,7 +275,7 @@ local function decode_split_from_book_item(book_item, split_index)
   end
 
   local split = {
-    name = source_label(book_item) or ("Split %d"):format(split_index),
+    name = source_label(book_item) or description.split_name or ("Split %d"):format(split_index),
     surface = description.surface or "nauvis",
     items = description.items or {},
     blueprints = {},
@@ -331,6 +336,7 @@ local function build_plan_description(state)
   return description_codec.export_to_description({
     format = "long-pole-plan",
     plan_id = state.plan_id,
+    plan_name = state.plan_name,
     visibility = "references-only",
     default_surface = (state.splits[1] and state.splits[1].surface) or "nauvis"
   })
@@ -339,6 +345,7 @@ end
 local function build_split_description(split)
   return description_codec.export_to_description({
     format = "long-pole-split",
+    split_name = split.name,
     surface = split.surface or "nauvis",
     items = split.items or {},
     technologies = split.technologies or {},
