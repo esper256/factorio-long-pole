@@ -1,26 +1,15 @@
-local event_registry = require("runtime.event_registry")
-local tick_driver = require("runtime.tick_driver")
+-- Runtime event composition. Feature behavior belongs in feature controllers;
+-- this file only makes Factorio's event map obvious in one place.
+local debug_window_controller = require("runtime.debug_window_controller")
 
 local M = {}
 
-local function on_init()
-  tick_driver.on_init()
-end
-
-local function on_configuration_changed(_event)
-  tick_driver.on_configuration_changed()
-end
-
-local function on_load()
-  tick_driver.on_load()
-end
-
-function M.register(script_root)
-  event_registry.register(script_root, {
-    on_init = on_init,
-    on_configuration_changed = on_configuration_changed,
-    on_load = on_load
-  })
+function M.install(script_root)
+  script_root.on_init(debug_window_controller.on_init)
+  script_root.on_configuration_changed(debug_window_controller.on_configuration_changed)
+  script_root.on_event(defines.events.on_player_created, debug_window_controller.on_player_created)
+  script_root.on_event(defines.events.on_player_joined_game, debug_window_controller.on_player_joined_game)
+  script_root.on_event("long-pole-toggle-debug-window", debug_window_controller.on_toggle_debug_window)
 end
 
 return M

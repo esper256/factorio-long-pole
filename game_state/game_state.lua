@@ -1,3 +1,7 @@
+-- Mutable runtime ledger for the mod's inferred game state.
+--
+-- This file exists so event listeners, tests, and debug UI all mutate and read
+-- the same data shape instead of inventing their own.
 local M = {}
 
 local STORAGE_VERSION = 1
@@ -7,27 +11,8 @@ local SurfaceViewMetatable = {
   __index = SurfaceMethods
 }
 
--- Mutable runtime game-state ledger.
---
--- Purpose:
--- - hold the mod's best current accounting of what has been produced,
---   consumed, placed, destroyed, and researched
--- - separate surface-scoped stock/accounting from global research state
---
--- Usage:
--- - create one state with `new()`
--- - advance its clock with `set_clock_tick(...)`
--- - bind a surface view with `surface(state, surface_name)`
--- - record incremental deltas with `record_*`
--- - apply reckonings/corrections with `set_*`
---
--- Design stance:
--- - this object is intentionally mutable
--- - it is expected to be updated frequently, potentially every tick
--- - avoid copy-heavy patterns here; debug/test rendering belongs elsewhere
-
 -- Count tables are Lua maps from prototype name to non-negative count, e.g.
--- {["iron-plate"] = 120, ["gear-wheel"] = 40}.
+-- {["iron-plate"] = 120, ["iron-gear-wheel"] = 40}.
 --
 -- The public API is intentionally split into:
 -- - product accounting: produced / consumed / destroyed
@@ -153,7 +138,10 @@ function M.set_clock_tick(state, clock_tick)
 end
 
 function M.surface(state, surface_name)
-  assert(surface_name ~= "", "surface_name must be non-empty")
+  assert(type(surface_name) == "string" and surface_name ~= "", "surface_name must be a non-empty string")
+
+  -- This is a small view, not a copy: it only points at the shared mutable
+  -- state and names the surface whose counters its methods should mutate.
   return setmetatable({
     state = state,
     surface_name = surface_name
@@ -161,10 +149,18 @@ function M.surface(state, surface_name)
 end
 
 function M.set_research(state, technology_name, researched, progress)
+  assert(type(technology_name) == "string" and technology_name ~= "", "technology_name must be a non-empty string")
+  if progress == nil then
+    progress = researched == true and 1 or 0
+  end
+  assert(type(progress) == "number" and progress >= 0 and progress <= 1,
+    technology_name .. " progress must be between zero and one")
+  assert(researched ~= true or progress == 1,
+    technology_name .. " must have complete progress when researched")
+
   local entry = research_entry(state, technology_name)
   entry.researched = researched == true
-  entry.progress = progress or 0
-  assert(entry.progress >= 0, technology_name .. " progress must be non-negative")
+  entry.progress = progress
   return entry
 end
 

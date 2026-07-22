@@ -1,3 +1,4 @@
+-- Small hand-written sample state for tests and temporary debug UI.
 local game_state = require("game_state.game_state")
 
 local M = {}
@@ -11,8 +12,7 @@ function M.sample()
     ["burner-inserter"] = 6,
     ["copper-plate"] = 310,
     ["electronic-circuit"] = 41,
-    ["gear-wheel"] = 120,
-    ["iron-gear-wheel"] = 18,
+    ["iron-gear-wheel"] = 138,
     ["iron-plate"] = 520,
     ["stone-furnace"] = 5,
     ["transport-belt"] = 94
@@ -22,8 +22,7 @@ function M.sample()
     ["automation-science-pack"] = 7,
     ["copper-plate"] = 222,
     ["electronic-circuit"] = 15,
-    ["gear-wheel"] = 72,
-    ["iron-gear-wheel"] = 12,
+    ["iron-gear-wheel"] = 84,
     ["iron-plate"] = 341
   })
 

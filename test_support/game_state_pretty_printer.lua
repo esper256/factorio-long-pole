@@ -1,3 +1,4 @@
+-- Deterministic text rendering for inspecting game_state in tests and debug UI.
 local game_state = require("game_state.game_state")
 
 local M = {}

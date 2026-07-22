@@ -28,6 +28,7 @@ factorio-long-pole/
 ├── hud/
 ├── plan_editor/
 ├── data_definitions/
+├── runtime_state/
 ├── test_support/
 ├── test_data/
 └── tests/
@@ -38,6 +39,7 @@ factorio-long-pole/
 - `runtime/` is the Factorio-facing layer.
 - `speedrun_plan/` is the domain model for the plan itself, not persistence.
 - `storage/` is specifically cross-save transport and library access.
+- `runtime_state/` owns save-local state held in Factorio's `storage` table.
 - `progress_analysis/` is the forecasting layer between tracked game state and the HUD.
 - Avoid generic directories such as `util/`, `helpers/`, `common/`, or `misc/`.
 - Create files in these directories only when the current implementation step needs them.

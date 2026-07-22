@@ -1,2 +1,2 @@
--- Runtime and startup settings will be introduced as the rewrite reaches the
--- corresponding implementation steps.
+-- Settings stage entrypoint. It stays present even when the current rewrite
+-- does not define any mod settings.
