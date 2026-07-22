@@ -5,4 +5,4 @@
 # Step 4 - Create the structure of the game_state data object, and a sample mock data of it, a way to display the data textually during tests without having to launch the game.
 # Step 5 - Create a custom input that toggles a HUD debug panel displaying the first 8 rows of game_state (which is mock data for now)
 # Step 6 - Implement event listeners in an attempt to as accurately as possible track real data instead of mock data.
-# Step 7 - Create a way to export real data from an actual factorio as loadable mock data for integration tests
+# Step 7 - Create a design document that decides how persistent storage will be done
