@@ -1,0 +1,4 @@
+-- Data stage entrypoint.
+--
+-- The rewrite does not define any custom prototypes yet, but this file exists
+-- now so data-stage additions have a stable home once they are needed.

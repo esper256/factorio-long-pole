@@ -1,19 +1,11 @@
 {
-  "name": "long-pole",
+  "name": "factorio-long-pole",
   "version": "0.0.1",
-  "title": "The Long Pole - Speedrun Planner",
-  "author": "TheFrizz",
-  "homepage": "https://github.com/esper256/factorio-long-pole",
-  "description": "Create a speedrun plan and see what is the long pole preventing your run from proceeding faster",
-  "factorio_version": "2.0",
+  "title": "Long Pole",
+  "author": "Eric Friesen",
+  "factorio_version": "2.1",
+  "description": "Speedrun planning and long-pole analysis for Factorio.",
   "dependencies": [
-    "base"
-  ],
-  "quality_required": false,
-  "rail_bridges_required": false,
-  "space_travel_required": false,
-  "spoiling_required": false,
-  "freezing_required": false,
-  "segmented_units_required": false,
-  "expansion_shaders_required": false
+    "base >= 2.1.0"
+  ]
 }
