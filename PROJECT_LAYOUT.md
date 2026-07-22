@@ -40,6 +40,8 @@ factorio-long-pole/
 - `speedrun_plan/` is the domain model for the plan itself, not persistence.
 - `storage/` is specifically cross-save transport and library access.
 - `runtime_state/` owns save-local state held in Factorio's `storage` table.
+- `snoopers/` contains one adapter per Factorio event source; `snooper_master.lua`
+  selects the active adapters and combines their event handlers.
 - `progress_analysis/` is the forecasting layer between tracked game state and the HUD.
 - Avoid generic directories such as `util/`, `helpers/`, `common/`, or `misc/`.
 - Create files in these directories only when the current implementation step needs them.
