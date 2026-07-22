@@ -44,6 +44,10 @@ function M.install(script_root)
   script_root.on_event(defines.events.on_player_created, on_player_created)
   script_root.on_event(defines.events.on_player_joined_game, on_player_joined_game)
   script_root.on_event(defines.events.on_gui_click, speedrun_hud_controller.on_gui_click)
+  script_root.on_event(
+    defines.events.on_runtime_mod_setting_changed,
+    speedrun_hud_controller.on_runtime_mod_setting_changed
+  )
   script_root.on_event("long-pole-toggle-debug-window", debug_window_controller.on_toggle_debug_window)
   script_root.on_nth_tick(60, on_second_tick)
   snooper_master.install(script_root)

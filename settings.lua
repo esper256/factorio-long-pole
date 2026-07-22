@@ -6,5 +6,11 @@ data:extend({
     name = "long-pole-auto-load-first-plan",
     setting_type = "runtime-per-user",
     default_value = true
+  },
+  {
+    type = "bool-setting",
+    name = "long-pole-auto-advance-split",
+    setting_type = "runtime-per-user",
+    default_value = false
   }
 })
