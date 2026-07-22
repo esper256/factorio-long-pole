@@ -1,8 +1,8 @@
 -- Records items granted by Factorio's on_player_mined_item event.
 --
--- This source covers an item the player mines, not the inventory contents of a
--- mined entity. Entity mining has its own API event and will need its own
--- snooper so its accounting rules stay explicit.
+-- The companion player_mined_entity snooper records the entity removal itself.
+-- This remains the sole source for returned items so one mining action does not
+-- duplicate product accounting.
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 

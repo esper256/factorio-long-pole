@@ -10,13 +10,19 @@ local function on_init()
   snooper_master.on_init()
 end
 
+local function on_second_tick(event)
+  -- Reconcile before rendering so the visible data is fresh for this interval.
+  snooper_master.on_second_tick(event)
+  debug_window_controller.on_second_tick(event)
+end
+
 function M.install(script_root)
   script_root.on_init(on_init)
   script_root.on_configuration_changed(debug_window_controller.on_configuration_changed)
   script_root.on_event(defines.events.on_player_created, debug_window_controller.on_player_created)
   script_root.on_event(defines.events.on_player_joined_game, debug_window_controller.on_player_joined_game)
   script_root.on_event("long-pole-toggle-debug-window", debug_window_controller.on_toggle_debug_window)
-  script_root.on_nth_tick(60, debug_window_controller.on_second_tick)
+  script_root.on_nth_tick(60, on_second_tick)
   snooper_master.install(script_root)
 end
 

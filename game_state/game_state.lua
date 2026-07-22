@@ -15,11 +15,11 @@ local SurfaceViewMetatable = {
 -- {["iron-plate"] = 120, ["iron-gear-wheel"] = 40}.
 --
 -- The public API is intentionally split into:
--- - product accounting: produced / consumed / destroyed
+-- - product accounting: produced / consumed / placed / destroyed
 -- - entity placement accounting: placed in the world
 --
--- Entity placement still updates the product ledger internally because placing
--- an entity spends the corresponding item/fluid from loose stock.
+-- Entity and product names are not assumed to match. Event snoopers record the
+-- entity that appeared and the item or items Factorio reports as spent.
 local function sorted_keys(map)
   local names = {}
   for name in pairs(map or {}) do
@@ -52,6 +52,7 @@ local function product_entry(state, surface_name, product_name)
 
   entry = {
     produced = 0,
+    harvested = 0,
     consumed = 0,
     placed = 0,
     destroyed = 0
@@ -97,6 +98,15 @@ local function add_product_counts(state, surface_name, field_name, counts_by_nam
   end
 end
 
+local function subtract_product_counts(state, surface_name, field_name, counts_by_name)
+  for product_name, count in pairs(counts_by_name) do
+    assert(count >= 0, product_name .. " must be non-negative")
+    local entry = product_entry(state, surface_name, product_name)
+    assert(entry[field_name] >= count, product_name .. " " .. field_name .. " must not become negative")
+    entry[field_name] = entry[field_name] - count
+  end
+end
+
 local function set_product_counts(state, surface_name, field_name, counts_by_name)
   for product_name, count in pairs(counts_by_name) do
     assert(count >= 0, product_name .. " must be non-negative")
@@ -105,11 +115,33 @@ local function set_product_counts(state, surface_name, field_name, counts_by_nam
   end
 end
 
+local function reconcile_product_counts(state, surface_name, field_name, counts_by_name)
+  local products = surface_data(state, surface_name).products
+
+  for product_name, entry in pairs(products) do
+    entry[field_name] = counts_by_name[product_name] or 0
+  end
+
+  for product_name, count in pairs(counts_by_name) do
+    assert(count >= 0, product_name .. " must be non-negative")
+    product_entry(state, surface_name, product_name)[field_name] = count
+  end
+end
+
 local function add_placed_entity_counts(state, surface_name, field_name, counts_by_name)
   for entity_name, count in pairs(counts_by_name) do
     assert(count >= 0, entity_name .. " must be non-negative")
     local entry = placed_entity_entry(state, surface_name, entity_name)
     entry[field_name] = entry[field_name] + count
+  end
+end
+
+local function subtract_placed_entity_counts(state, surface_name, field_name, counts_by_name)
+  for entity_name, count in pairs(counts_by_name) do
+    assert(count >= 0, entity_name .. " must be non-negative")
+    local entry = placed_entity_entry(state, surface_name, entity_name)
+    assert(entry[field_name] >= count, entity_name .. " " .. field_name .. " must not become negative")
+    entry[field_name] = entry[field_name] - count
   end
 end
 
@@ -164,8 +196,19 @@ function M.set_research(state, technology_name, researched, progress)
   return entry
 end
 
+function M.total_products_produced(product)
+  return (product.produced or 0) + (product.harvested or 0)
+end
+
 function M.loose_stock(product)
-  return (product.produced or 0) - (product.consumed or 0) - (product.placed or 0) - (product.destroyed or 0)
+  return M.total_products_produced(product) - (product.consumed or 0) - (product.placed or 0) - (product.destroyed or 0)
+end
+
+-- Replaces the production-statistics fields for a surface. Unlike the set_*
+-- methods, absent products are reset to zero because this is a full snapshot.
+function M.reconcile_product_statistics(state, surface_name, produced_counts, consumed_counts)
+  reconcile_product_counts(state, surface_name, "produced", produced_counts)
+  reconcile_product_counts(state, surface_name, "consumed", consumed_counts)
 end
 
 -- Deterministic iteration helpers are for test/debug output only.
@@ -189,12 +232,20 @@ function SurfaceMethods.record_products_produced(self, counts_by_name)
   add_product_counts(self.state, self.surface_name, "produced", counts_by_name)
 end
 
+function SurfaceMethods.record_products_harvested(self, counts_by_name)
+  add_product_counts(self.state, self.surface_name, "harvested", counts_by_name)
+end
+
 function SurfaceMethods.record_products_consumed(self, counts_by_name)
   add_product_counts(self.state, self.surface_name, "consumed", counts_by_name)
 end
 
-function SurfaceMethods.record_entities_placed(self, counts_by_name)
+function SurfaceMethods.record_products_placed(self, counts_by_name)
   add_product_counts(self.state, self.surface_name, "placed", counts_by_name)
+end
+
+function SurfaceMethods.record_products_unplaced(self, counts_by_name)
+  subtract_product_counts(self.state, self.surface_name, "placed", counts_by_name)
 end
 
 function SurfaceMethods.record_products_destroyed(self, counts_by_name)
@@ -209,7 +260,7 @@ function SurfaceMethods.set_products_consumed(self, counts_by_name)
   set_product_counts(self.state, self.surface_name, "consumed", counts_by_name)
 end
 
-function SurfaceMethods.set_entities_placed(self, counts_by_name)
+function SurfaceMethods.set_products_placed(self, counts_by_name)
   set_product_counts(self.state, self.surface_name, "placed", counts_by_name)
 end
 
@@ -219,6 +270,10 @@ end
 
 function SurfaceMethods.record_placed_entities(self, counts_by_name)
   add_placed_entity_counts(self.state, self.surface_name, "placed", counts_by_name)
+end
+
+function SurfaceMethods.record_unplaced_entities(self, counts_by_name)
+  subtract_placed_entity_counts(self.state, self.surface_name, "placed", counts_by_name)
 end
 
 function SurfaceMethods.record_destroyed_entities(self, counts_by_name)

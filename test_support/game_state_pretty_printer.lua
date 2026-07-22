@@ -10,7 +10,7 @@ end
 local function format_product_row(product_name, entry)
   return ("  product %-22s produced=%-5d consumed=%-5d placed=%-5d destroyed=%-5d loose_stock=%-5d"):format(
     product_name,
-    entry.produced or 0,
+    game_state.total_products_produced(entry),
     entry.consumed or 0,
     entry.placed or 0,
     entry.destroyed or 0,

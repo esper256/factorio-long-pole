@@ -26,7 +26,7 @@ function M.sample()
     ["iron-plate"] = 341
   })
 
-  nauvis:record_entities_placed({
+  nauvis:record_products_placed({
     ["burner-inserter"] = 4,
     ["stone-furnace"] = 4,
     ["transport-belt"] = 61

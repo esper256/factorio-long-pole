@@ -6,18 +6,41 @@
 local configured_snoopers = {
   {
     name = "player_mined_item",
-    enabled = true,
+    -- Entity-specific mining and production statistics now own item accounting.
+    -- Retain this alternative until we deliberately cover tile mining.
+    enabled = false,
     module = require("snoopers.player_mined_item")
   },
   {
     name = "starting_inventory",
     enabled = true,
     module = require("snoopers.starting_inventory")
+  },
+  {
+    name = "player_mined_entity",
+    enabled = true,
+    module = require("snoopers.player_mined_entity")
+  },
+  {
+    name = "player_built_entity",
+    enabled = true,
+    module = require("snoopers.player_built_entity")
+  },
+  {
+    name = "robot_built_entity",
+    enabled = true,
+    module = require("snoopers.robot_built_entity")
+  },
+  {
+    name = "production_statistics",
+    enabled = true,
+    module = require("snoopers.production_statistics")
   }
 }
 
 local handlers_by_event_id = {}
 local init_handlers = {}
+local second_tick_handlers = {}
 
 local function append_handler(event_id, handler)
   local handlers = handlers_by_event_id[event_id]
@@ -32,6 +55,10 @@ for _, snooper in ipairs(configured_snoopers) do
   if snooper.enabled then
     if snooper.module.on_init then
       init_handlers[#init_handlers + 1] = snooper.module.on_init
+    end
+
+    if snooper.module.on_second_tick then
+      second_tick_handlers[#second_tick_handlers + 1] = snooper.module.on_second_tick
     end
 
     if snooper.module.event_names then
@@ -58,6 +85,12 @@ local M = {}
 function M.on_init()
   for _, handler in ipairs(init_handlers) do
     handler()
+  end
+end
+
+function M.on_second_tick(event)
+  for _, handler in ipairs(second_tick_handlers) do
+    handler(event)
   end
 end
 

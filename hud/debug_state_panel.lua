@@ -26,10 +26,12 @@ local function product_icon_name(product_name)
 end
 
 local function produced_caption(product)
+  local produced = game_state.total_products_produced(product)
+
   if product.destroyed > 0 then
-    return ("%d - %d"):format(product.produced, product.destroyed)
+    return ("%d - %d"):format(produced, product.destroyed)
   end
-  return tostring(product.produced)
+  return tostring(produced)
 end
 
 local function consumed_caption(product)
@@ -56,10 +58,7 @@ local function build_rows(table_element, state)
         type = "label",
         caption = produced_caption(product)
       })
-      table_element.add({
-        type = "label",
-        caption = consumed_caption(product)
-      })
+      table_element.add({type = "label", caption = consumed_caption(product)})
       table_element.add({
         type = "label",
         caption = tostring(game_state.loose_stock(product))
