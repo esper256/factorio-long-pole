@@ -77,7 +77,15 @@ research automation
         }),
         blueprint("Inserter", "", {
           {name = "burner-inserter"}
-        })
+        }),
+        {
+          valid_for_read = true,
+          is_deconstruction_item = true
+        },
+        {
+          valid_for_read = true,
+          is_upgrade_item = true
+        }
       })
     }
   end
@@ -106,6 +114,32 @@ assert(research:placement_item_count("lab") == 2)
 assert(research:placement_item_count("burner-inserter") == 1)
 assert(research:extra_item_count("iron-plate") == 0)
 assert(research:requires_research("automation"))
+
+local planner_book = {
+  is_blueprint_book = true,
+  label = "Planner practice [LP]",
+  get_inventory = function()
+    return {
+      {
+        valid_for_read = true,
+        is_deconstruction_item = true,
+        label = "Harvest coal rocks",
+        planner_description = ""
+      },
+      {
+        valid_for_read = true,
+        is_upgrade_item = true,
+        label = "Upgrade furnaces",
+        planner_description = ""
+      }
+    }
+  end
+}
+local planner_plan, planner_error = loader.load_book(planner_book)
+assert(planner_plan, planner_error)
+assert(planner_plan:split_count() == 2)
+assert(planner_plan:split_at(1):placement_item_count("stone-furnace") == 0)
+assert(planner_plan:split_at(2):placement_item_count("lab") == 0)
 
 local malformed = {
   is_blueprint_book = true,
@@ -156,7 +190,7 @@ local nested_book = {
 
 local nested_plan, nested_error = loader.load_book(nested_book)
 assert(nested_plan == nil)
-assert(nested_error == "book page 1 page 1 must be a blueprint, not a nested book or planner")
+assert(nested_error == "book page 1 page 1 must be a blueprint, deconstruction planner, or upgrade planner; nested blueprint books are not allowed")
 
 local unknown_research_book = {
   is_blueprint_book = true,

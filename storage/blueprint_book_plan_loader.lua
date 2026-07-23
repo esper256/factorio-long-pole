@@ -3,10 +3,12 @@
 -- Other features should depend on this module and the returned speedrun_plan
 -- object, never on blueprint descriptions or the Factorio blueprint API.
 --
--- A split may be one blueprint or one flat blueprint book. In either case, the
--- top-level split item owns this block; a split book's child blueprints only
--- contribute their normalized placement-item requirements. Text outside the
--- markers is left for the plan author's notes.
+-- A split may be one blueprint, one flat blueprint book, a deconstruction
+-- planner, or an upgrade planner. A split book may contain blueprints and
+-- planners, but not another book. Only its child blueprints contribute their
+-- normalized placement-item requirements. Planners have no placement
+-- requirements, but a top-level planner's label and description still provide
+-- split metadata. Text outside the markers is left for the plan author's notes.
 --
 --   ====== long-pole data-begin ======
 --   # Comments and blank lines are ignored.
@@ -62,18 +64,24 @@ local function add_placement_item_counts(total, counts)
   end
 end
 
-local function read_flat_stack_blueprint(page, location)
-  if page.is_blueprint ~= true then
-    return nil, location .. " must be a blueprint, not a nested book or planner"
+local function read_flat_stack_page(page, location)
+  if page.is_blueprint == true then
+    return blueprint_placement_item_counts(page, location)
   end
-  return blueprint_placement_item_counts(page, location)
+  if page.is_deconstruction_item == true or page.is_upgrade_item == true then
+    return {}
+  end
+  return nil, location .. " must be a blueprint, deconstruction planner, or upgrade planner; nested blueprint books are not allowed"
 end
 
-local function read_flat_record_blueprint(page, location)
-  if page.type ~= "blueprint" then
-    return nil, location .. " must be a blueprint, not a nested book or planner"
+local function read_flat_record_page(page, location)
+  if page.type == "blueprint" then
+    return blueprint_placement_item_counts(page, location)
   end
-  return blueprint_placement_item_counts(page, location)
+  if page.type == "deconstruction-planner" or page.type == "upgrade-planner" then
+    return {}
+  end
+  return nil, location .. " must be a blueprint, deconstruction planner, or upgrade planner; nested blueprint books are not allowed"
 end
 
 local function read_flat_stack_book(book, location)
@@ -86,7 +94,7 @@ local function read_flat_stack_book(book, location)
   for index = 1, #inventory do
     local page = inventory[index]
     if page.valid_for_read then
-      local page_counts, page_error = read_flat_stack_blueprint(page, location .. " page " .. index)
+      local page_counts, page_error = read_flat_stack_page(page, location .. " page " .. index)
       if not page_counts then
         return nil, page_error
       end
@@ -99,7 +107,7 @@ end
 local function read_flat_record_book(book, location)
   local counts = {}
   for index, page in pairs(book.contents) do
-    local page_counts, page_error = read_flat_record_blueprint(page, location .. " page " .. index)
+    local page_counts, page_error = read_flat_record_page(page, location .. " page " .. index)
     if not page_counts then
       return nil, page_error
     end
@@ -118,6 +126,19 @@ local function split_from_book(book, location, counts)
     label = label,
     description = book.blueprint_description or "",
     placement_item_counts = counts
+  }
+end
+
+local function split_from_planner(planner, location)
+  local label, label_error = non_empty_label(planner, location)
+  if not label then
+    return nil, label_error
+  end
+
+  return {
+    label = label,
+    description = planner.planner_description or "",
+    placement_item_counts = {}
   }
 end
 
@@ -145,7 +166,10 @@ local function read_stack_split(page, location)
     end
     return split_from_book(page, location, counts)
   end
-  return nil, location .. " must be a blueprint or a flat blueprint book"
+  if page.is_deconstruction_item == true or page.is_upgrade_item == true then
+    return split_from_planner(page, location)
+  end
+  return nil, location .. " must be a blueprint, a flat blueprint book, a deconstruction planner, or an upgrade planner"
 end
 
 local function read_record_split(page, location)
@@ -172,7 +196,10 @@ local function read_record_split(page, location)
     end
     return split_from_book(page, location, counts)
   end
-  return nil, location .. " must be a blueprint or a flat blueprint book"
+  if page.type == "deconstruction-planner" or page.type == "upgrade-planner" then
+    return split_from_planner(page, location)
+  end
+  return nil, location .. " must be a blueprint, a flat blueprint book, a deconstruction planner, or an upgrade planner"
 end
 
 local function read_stack_book(book)
