@@ -28,6 +28,7 @@ end
 local function new_split(source)
   local split = {
     label = source.label,
+    source_page_index = source.source_page_index,
     placement_item_counts = source.placement_item_counts,
     extra_item_counts = source.extra_item_counts,
     research_technologies = source.research_technologies,
@@ -70,6 +71,12 @@ end
 
 function SplitMethods:placement_item_count(item_name)
   return self.placement_item_counts[item_name] or 0
+end
+
+-- The numbered page in the original plan book. This is a durable locator,
+-- not a retained Factorio LuaObject.
+function SplitMethods:source_page()
+  return self.source_page_index
 end
 
 function SplitMethods:extra_item_count(item_name)

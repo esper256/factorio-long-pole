@@ -193,6 +193,7 @@ local function read_stack_book(book)
       if not split then
         return nil, page_error
       end
+      split.source_page_index = index
       pages[#pages + 1] = split
     end
   end
@@ -217,6 +218,7 @@ local function read_record_book(book)
     if not split then
       return nil, page_error
     end
+    split.source_page_index = index
     pages[#pages + 1] = split
   end
 
@@ -356,6 +358,7 @@ function M.load_book(book)
     end
     metadata.label = page.label
     metadata.placement_item_counts = page.placement_item_counts
+    metadata.source_page_index = page.source_page_index
     splits[index] = metadata
   end
 

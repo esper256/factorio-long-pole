@@ -12,5 +12,11 @@ data:extend({
     name = "long-pole-auto-advance-split",
     setting_type = "runtime-per-user",
     default_value = false
+  },
+  {
+    type = "bool-setting",
+    name = "long-pole-put-current-split-in-quickbar",
+    setting_type = "runtime-per-user",
+    default_value = false
   }
 })

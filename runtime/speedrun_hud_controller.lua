@@ -7,11 +7,38 @@ local extra_item_progress = require("progress_analysis.extra_item_progress")
 local research_progress = require("progress_analysis.research_progress")
 local split_completion = require("progress_analysis.split_completion")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
+local current_split_quickbar = require("runtime.current_split_quickbar")
 
 local M = {}
 local AUTO_LOAD_SETTING_NAME = "long-pole-auto-load-first-plan"
 local AUTO_ADVANCE_SETTING_NAME = "long-pole-auto-advance-split"
+local CURRENT_SPLIT_QUICKBAR_SETTING_NAME = "long-pole-put-current-split-in-quickbar"
 local auto_load_errors_by_player = {}
+
+local function current_split_quickbar_enabled(player)
+  local setting = settings.get_player_settings(player.index)[CURRENT_SPLIT_QUICKBAR_SETTING_NAME]
+  return setting and setting.value
+end
+
+local function start_attempt(player, plan, library_book_index)
+  local attempt = speedrun_attempts.start(
+    player.index,
+    plan,
+    library_book_index,
+    long_pole_runtime_state.get().debug_game_state
+  )
+  if current_split_quickbar_enabled(player) then
+    current_split_quickbar.update(player, attempt)
+  end
+  return attempt
+end
+
+local function advance_attempt(player, attempt)
+  attempt:mark_current_split_done(game.tick, long_pole_runtime_state.get().debug_game_state)
+  if current_split_quickbar_enabled(player) then
+    current_split_quickbar.update(player, attempt)
+  end
+end
 
 local function auto_load_first_plan(player)
   if speedrun_attempts.get(player.index) then
@@ -27,7 +54,7 @@ local function auto_load_first_plan(player)
 
   local plan, library_book_index, load_error = blueprint_book_plan_loader.load_first_library_book_for_player(player)
   if plan then
-    speedrun_attempts.start(player.index, plan, library_book_index, long_pole_runtime_state.get().debug_game_state)
+    start_attempt(player, plan, library_book_index)
   elseif load_error then
     -- A malformed marked book has already printed its actionable error. Do not
     -- repeat it every second; a reload or setting change retries the library.
@@ -72,7 +99,7 @@ local function refresh(player)
       view.research_progress,
       view.extra_item_progress
     }) then
-    attempt:mark_current_split_done(game.tick, state)
+    advance_attempt(player, attempt)
     view = view_for_attempt(attempt, state)
   end
   speedrun_hud.refresh(player, view)
@@ -115,7 +142,9 @@ function M.on_second_tick(_event)
 end
 
 function M.on_runtime_mod_setting_changed(event)
-  if event.setting ~= AUTO_LOAD_SETTING_NAME and event.setting ~= AUTO_ADVANCE_SETTING_NAME then
+  if event.setting ~= AUTO_LOAD_SETTING_NAME
+    and event.setting ~= AUTO_ADVANCE_SETTING_NAME
+    and event.setting ~= CURRENT_SPLIT_QUICKBAR_SETTING_NAME then
     return
   end
 
@@ -124,6 +153,11 @@ function M.on_runtime_mod_setting_changed(event)
     if event.setting == AUTO_LOAD_SETTING_NAME then
       auto_load_errors_by_player[player.index] = nil
       auto_load_first_plan(player)
+    elseif event.setting == CURRENT_SPLIT_QUICKBAR_SETTING_NAME and current_split_quickbar_enabled(player) then
+      local attempt = speedrun_attempts.get(player.index)
+      if attempt then
+        current_split_quickbar.update(player, attempt)
+      end
     end
     refresh(player)
   end
@@ -137,7 +171,7 @@ function M.load_library_plan(player, library_book_index)
     return nil, load_error
   end
 
-  speedrun_attempts.start(player.index, plan, library_book_index, long_pole_runtime_state.get().debug_game_state)
+  start_attempt(player, plan, library_book_index)
   refresh(player)
   return plan
 end
@@ -151,7 +185,7 @@ function M.on_gui_click(event)
   if event.element.name == speedrun_hud.advance_split_button_name() then
     local attempt = speedrun_attempts.get(player.index)
     if attempt then
-      attempt:mark_current_split_done(game.tick, long_pole_runtime_state.get().debug_game_state)
+      advance_attempt(player, attempt)
       refresh(player)
     end
     return
@@ -167,7 +201,7 @@ function M.on_gui_click(event)
     return
   end
 
-  speedrun_attempts.start(player.index, plan, library_book_index, long_pole_runtime_state.get().debug_game_state)
+  start_attempt(player, plan, library_book_index)
   refresh(player)
 end
 
