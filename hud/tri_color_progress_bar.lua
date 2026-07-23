@@ -5,6 +5,10 @@ local M = {}
 local DONE_NAME = "done"
 local PENDING_NAME = "pending"
 local NOT_STARTED_NAME = "not_started"
+local INDICATOR_ICON_NAME = "indicator_icon"
+local SEGMENTS_NAME = "segments"
+local INDICATOR_ICON_SIZE = 10
+local INDICATOR_ICON_GAP = 2
 
 local COLORS = {
   done = { r = 0.36, g = 0.70, b = 0.27 },
@@ -36,7 +40,7 @@ local function segment_width(total_width, amount, total)
   return math.max(1, math.floor(total_width * amount / total))
 end
 
-function M.add(parent, name, width)
+function M.add(parent, name, width, indicator_sprite)
   local bar = parent.add({
     type = "flow",
     name = name,
@@ -44,10 +48,30 @@ function M.add(parent, name, width)
   })
   bar.style.minimal_width = width
   bar.style.maximal_width = width
-  bar.style.horizontal_spacing = 0
-  add_segment(bar, DONE_NAME, COLORS.done)
-  add_segment(bar, PENDING_NAME, COLORS.pending)
-  add_segment(bar, NOT_STARTED_NAME, COLORS.not_started)
+  bar.style.horizontal_spacing = indicator_sprite and INDICATOR_ICON_GAP or 0
+  bar.style.vertical_align = "center"
+  local segment_width = width
+  if indicator_sprite then
+    local icon = bar.add({
+      type = "sprite",
+      name = INDICATOR_ICON_NAME,
+      sprite = indicator_sprite
+    })
+    icon.style.width = INDICATOR_ICON_SIZE
+    icon.style.height = INDICATOR_ICON_SIZE
+    segment_width = segment_width - INDICATOR_ICON_SIZE - INDICATOR_ICON_GAP
+  end
+  local segments = bar.add({
+    type = "flow",
+    name = SEGMENTS_NAME,
+    direction = "horizontal"
+  })
+  segments.style.minimal_width = segment_width
+  segments.style.maximal_width = segment_width
+  segments.style.horizontal_spacing = 0
+  add_segment(segments, DONE_NAME, COLORS.done)
+  add_segment(segments, PENDING_NAME, COLORS.pending)
+  add_segment(segments, NOT_STARTED_NAME, COLORS.not_started)
   return bar
 end
 
@@ -64,11 +88,12 @@ function M.refresh(bar, progress)
   local done = clamp(progress.done, 0, progress.total)
   local pending = clamp(progress.pending, 0, progress.total - done)
   local not_started = progress.total - done - pending
-  local width = bar.style.minimal_width
+  local segments = bar[SEGMENTS_NAME]
+  local width = segments.style.minimal_width
 
-  local done_segment = bar[DONE_NAME]
-  local pending_segment = bar[PENDING_NAME]
-  local not_started_segment = bar[NOT_STARTED_NAME]
+  local done_segment = segments[DONE_NAME]
+  local pending_segment = segments[PENDING_NAME]
+  local not_started_segment = segments[NOT_STARTED_NAME]
   local done_width = segment_width(width, done, progress.total)
   local pending_width = segment_width(width, pending, progress.total)
   local not_started_width = width - done_width - pending_width

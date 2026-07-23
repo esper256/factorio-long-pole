@@ -19,6 +19,18 @@ local CONSTRUCTION_SHORTFALLS_NAME = "construction_shortfalls"
 local RESEARCH_SHORTFALLS_NAME = "research_shortfalls"
 local EXTRA_ITEM_SHORTFALLS_NAME = "extra_item_shortfalls"
 local HUD_WIDTH = 320
+local function sprite_or_fallback(preferred, fallback)
+  if helpers and helpers.is_valid_sprite_path(preferred) then
+    return preferred
+  end
+  return fallback
+end
+
+local CONSTRUCTION_ICON = sprite_or_fallback("virtual-signal/signal-blueprint", "item/blueprint")
+local RESEARCH_ICON = sprite_or_fallback("virtual-signal/signal-science-pack", "utility/technology_white")
+local HARVESTING_ICON = sprite_or_fallback("virtual-signal/signal-axe", "utility/hand")
+local NEXT_SPLIT_COLOR = { r = 0.82, g = 0.82, b = 0.82 }
+local NEXT_SPLIT_HOVER_COLOR = { r = 1, g = 1, b = 1 }
 
 local function game_time_caption(tick)
   local total_seconds = math.floor(tick / 60)
@@ -52,8 +64,8 @@ local function build(player)
     sprite = "utility/right_arrow",
     tooltip = "Load the next [LP] blueprint book in your library."
   })
-  next_plan_button.style.width = 24
-  next_plan_button.style.height = 24
+  next_plan_button.style.width = 16
+  next_plan_button.style.height = 16
 
   hud.add({
     type = "label",
@@ -63,11 +75,11 @@ local function build(player)
     type = "label",
     name = CURRENT_NAME
   })
-  tri_color_progress_bar.add(hud, CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH)
+  tri_color_progress_bar.add(hud, CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH, CONSTRUCTION_ICON)
   icon_quantity_list.add(hud, CONSTRUCTION_SHORTFALLS_NAME, HUD_WIDTH)
-  tri_color_progress_bar.add(hud, RESEARCH_PROGRESS_NAME, HUD_WIDTH)
+  tri_color_progress_bar.add(hud, RESEARCH_PROGRESS_NAME, HUD_WIDTH, RESEARCH_ICON)
   icon_quantity_list.add(hud, RESEARCH_SHORTFALLS_NAME, HUD_WIDTH)
-  tri_color_progress_bar.add(hud, EXTRA_ITEM_PROGRESS_NAME, HUD_WIDTH)
+  tri_color_progress_bar.add(hud, EXTRA_ITEM_PROGRESS_NAME, HUD_WIDTH, HARVESTING_ICON)
   icon_quantity_list.add(hud, EXTRA_ITEM_SHORTFALLS_NAME, HUD_WIDTH)
   hud.add({
     type = "button",
@@ -75,6 +87,9 @@ local function build(player)
     style = "transparent_button",
     tooltip = "Mark the current split complete."
   })
+  hud[ADVANCE_SPLIT_BUTTON_NAME].style.font_color = NEXT_SPLIT_COLOR
+  hud[ADVANCE_SPLIT_BUTTON_NAME].style.hovered_font_color = NEXT_SPLIT_HOVER_COLOR
+  hud[ADVANCE_SPLIT_BUTTON_NAME].style.clicked_font_color = NEXT_SPLIT_HOVER_COLOR
 
   return hud
 end
