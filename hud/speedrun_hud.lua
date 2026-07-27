@@ -18,7 +18,7 @@ local EXTRA_ITEM_PROGRESS_NAME = "extra_item_progress"
 local CONSTRUCTION_SHORTFALLS_NAME = "construction_shortfalls"
 local RESEARCH_SHORTFALLS_NAME = "research_shortfalls"
 local EXTRA_ITEM_SHORTFALLS_NAME = "extra_item_shortfalls"
-local HUD_WIDTH = 320
+local HUD_WIDTH = 192
 local function sprite_or_fallback(preferred, fallback)
   if helpers and helpers.is_valid_sprite_path(preferred) then
     return preferred

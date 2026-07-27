@@ -3,8 +3,6 @@ local M = {}
 
 local ICON_SIZE = 8
 local MAX_ENTRIES = 8
-local PAIR_WIDTH = 36
-local QUANTITY_WIDTH = 27
 
 function M.add(parent, name, width)
   local list = parent.add({
@@ -16,7 +14,7 @@ function M.add(parent, name, width)
   list.style.maximal_width = width
   list.style.margin = 0
   list.style.padding = 0
-  list.style.horizontal_spacing = 3
+  list.style.horizontal_spacing = 0
   return list
 end
 
@@ -50,10 +48,9 @@ local function add_item(list, index, entry)
     direction = "horizontal",
     tooltip = entry.item_name .. ": " .. display_count
   })
-  pair.style.width = PAIR_WIDTH
   pair.style.margin = 0
   pair.style.padding = 0
-  pair.style.horizontal_spacing = 1
+  pair.style.horizontal_spacing = 0
   local icon = pair.add({
     type = "sprite",
     name = "item_icon",
@@ -67,7 +64,6 @@ local function add_item(list, index, entry)
     caption = tostring(display_count)
   })
   quantity.style.font = "default-small"
-  quantity.style.width = QUANTITY_WIDTH
 end
 
 function M.refresh(list, entries)
