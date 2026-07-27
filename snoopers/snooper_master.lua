@@ -27,6 +27,11 @@ local configured_snoopers = {
     module = require("snoopers.player_built_entity")
   },
   {
+    name = "space_platform_built_entity",
+    enabled = true,
+    module = require("snoopers.space_platform_built_entity")
+  },
+  {
     name = "robot_built_entity",
     enabled = true,
     module = require("snoopers.robot_built_entity")

@@ -27,13 +27,22 @@ function M.on_event(event)
     return
   end
 
+  -- Map-editor placements can have an invalid temporary inventory because they
+  -- do not consume an item. Ignore them rather than attempting to account for
+  -- an entity without its corresponding placed product.
+  local consumed_items = event.consumed_items
+  if consumed_items == nil or consumed_items.valid == false then
+    return
+  end
+
   local runtime_state = long_pole_runtime_state.get()
   local surface = game_state.surface(runtime_state.debug_game_state, event.entity.surface.name)
 
   surface:record_placed_entities({
     [event.entity.name] = 1
   })
-  surface:record_products_placed(product_counts(event.consumed_items.get_contents()))
+
+  surface:record_products_placed(product_counts(consumed_items.get_contents()))
 end
 
 return M

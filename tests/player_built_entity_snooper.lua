@@ -30,6 +30,21 @@ assert(surface.placed_entities["burner-mining-drill"].placed == 1)
 assert(surface.products["burner-mining-drill"].placed == 1)
 assert(surface.products["iron-plate"].placed == 5)
 
+-- Map-editor placements can report an invalid temporary inventory. They must
+-- be ignored without attempting to inspect the inventory.
+snooper.on_event({
+  entity = {
+    name = "steel-chest",
+    surface = {
+      name = "nauvis"
+    }
+  },
+  consumed_items = { valid = false }
+})
+
+assert(surface.placed_entities["steel-chest"] == nil)
+assert(surface.products["steel-chest"] == nil)
+
 snooper.on_event({
   entity = {
     type = "entity-ghost",
