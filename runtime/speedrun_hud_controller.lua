@@ -3,6 +3,7 @@ local speedrun_hud = require("hud.speedrun_hud")
 local speedrun_attempts = require("runtime_state.speedrun_attempts")
 local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
 local construction_progress = require("progress_analysis.construction_progress")
+local next_split_construction_progress = require("progress_analysis.next_split_construction_progress")
 local extra_item_progress = require("progress_analysis.extra_item_progress")
 local research_progress = require("progress_analysis.research_progress")
 local split_completion = require("progress_analysis.split_completion")
@@ -74,6 +75,16 @@ local function view_for_attempt(attempt, state)
     )
     view.research_progress = research_progress.for_split(split, state, game.forces.player)
     view.extra_item_progress = extra_item_progress.for_split(split, state)
+
+    local next_split = attempt.plan:split_at(attempt.current_split_index + 1)
+    if next_split and #next_split.placement_item_names > 0 then
+      view.next_split_construction_progress = next_split_construction_progress.for_splits(
+        split,
+        next_split,
+        state,
+        attempt.split_start_placed_product_counts
+      )
+    end
   end
   return view
 end

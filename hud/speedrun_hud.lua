@@ -18,6 +18,8 @@ local EXTRA_ITEM_PROGRESS_NAME = "extra_item_progress"
 local CONSTRUCTION_SHORTFALLS_NAME = "construction_shortfalls"
 local RESEARCH_SHORTFALLS_NAME = "research_shortfalls"
 local EXTRA_ITEM_SHORTFALLS_NAME = "extra_item_shortfalls"
+local NEXT_SPLIT_CONSTRUCTION_PROGRESS_NAME = "next_split_construction_progress"
+local NEXT_SPLIT_CONSTRUCTION_SHORTFALLS_NAME = "next_split_construction_shortfalls"
 local HUD_WIDTH = 192
 local function sprite_or_fallback(preferred, fallback)
   if helpers and helpers.is_valid_sprite_path(preferred) then
@@ -90,6 +92,8 @@ local function build(player)
   hud[ADVANCE_SPLIT_BUTTON_NAME].style.font_color = NEXT_SPLIT_COLOR
   hud[ADVANCE_SPLIT_BUTTON_NAME].style.hovered_font_color = NEXT_SPLIT_HOVER_COLOR
   hud[ADVANCE_SPLIT_BUTTON_NAME].style.clicked_font_color = NEXT_SPLIT_HOVER_COLOR
+  tri_color_progress_bar.add(hud, NEXT_SPLIT_CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH, CONSTRUCTION_ICON)
+  icon_quantity_list.add(hud, NEXT_SPLIT_CONSTRUCTION_SHORTFALLS_NAME, HUD_WIDTH)
 
   return hud
 end
@@ -130,6 +134,8 @@ function M.refresh(player, view)
   local research_shortfalls = hud[RESEARCH_SHORTFALLS_NAME]
   local extra_item_shortfalls = hud[EXTRA_ITEM_SHORTFALLS_NAME]
   local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
+  local next_split_construction = hud[NEXT_SPLIT_CONSTRUCTION_PROGRESS_NAME]
+  local next_split_construction_shortfalls = hud[NEXT_SPLIT_CONSTRUCTION_SHORTFALLS_NAME]
 
   if not view then
     plan_name.caption = "No active speedrun"
@@ -142,6 +148,8 @@ function M.refresh(player, view)
     research_shortfalls.visible = false
     extra_item_shortfalls.visible = false
     advance_split_button.visible = false
+    next_split_construction.visible = false
+    next_split_construction_shortfalls.visible = false
     return
   end
 
@@ -180,6 +188,16 @@ function M.refresh(player, view)
   end
   advance_split_button.visible = view.next_split_label ~= nil
   advance_split_button.caption = view.next_split_label or ""
+  if view.next_split_construction_progress then
+    tri_color_progress_bar.refresh(next_split_construction, view.next_split_construction_progress)
+    icon_quantity_list.refresh(
+      next_split_construction_shortfalls,
+      view.next_split_construction_progress.unfinished_items
+    )
+  else
+    next_split_construction.visible = false
+    next_split_construction_shortfalls.visible = false
+  end
 end
 
 return M
