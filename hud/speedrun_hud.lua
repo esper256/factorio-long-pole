@@ -8,8 +8,11 @@ local M = {}
 local HUD_NAME = "long_pole_speedrun_hud"
 local HEADER_NAME = "speedrun_header"
 local PLAN_NAME = "active_speedrun_name"
+local CLOCK_NAME = "game_clock"
 local PREVIOUS_NAME = "previous_split"
 local CURRENT_NAME = "current_split"
+local NEXT_ROW_NAME = "next_split_row"
+local NEXT_TITLE_NAME = "next_split_title"
 local ADVANCE_SPLIT_BUTTON_NAME = "long_pole_advance_split"
 local NEXT_PLAN_BUTTON_NAME = "long_pole_next_plan"
 local CONSTRUCTION_PROGRESS_NAME = "construction_progress"
@@ -19,6 +22,9 @@ local RESEARCH_SHORTFALLS_NAME = "research_shortfalls"
 local NEXT_SPLIT_PRODUCTION_PROGRESS_NAME = "next_split_production_progress"
 local NEXT_SPLIT_PRODUCTION_SHORTFALLS_NAME = "next_split_production_shortfalls"
 local HUD_WIDTH = 192
+local DIM_COLOR = { r = 0.62, g = 0.62, b = 0.62 }
+local NEXT_COLOR = { r = 0.82, g = 0.82, b = 0.82 }
+
 local function sprite_or_fallback(preferred, fallback)
   if helpers and helpers.is_valid_sprite_path(preferred) then
     return preferred
@@ -27,67 +33,119 @@ local function sprite_or_fallback(preferred, fallback)
 end
 
 local CONSTRUCTION_ICON = sprite_or_fallback("virtual-signal/signal-blueprint", "item/blueprint")
+local PRODUCTION_ICON = sprite_or_fallback("item/assembling-machine-1", "item/iron-gear-wheel")
 local RESEARCH_ICON = sprite_or_fallback("virtual-signal/signal-science-pack", "utility/technology_white")
-local NEXT_SPLIT_COLOR = { r = 0.82, g = 0.82, b = 0.82 }
-local NEXT_SPLIT_HOVER_COLOR = { r = 1, g = 1, b = 1 }
+
+local function display_plan_label(label)
+  return (label or ""):gsub("%s*%[LP%]$", "")
+end
 
 local function game_time_caption(tick)
-  local total_seconds = math.floor(tick / 60)
+  local total_seconds = math.floor((tick or 0) / 60)
   local hours = math.floor(total_seconds / 3600)
   local minutes = math.floor(total_seconds % 3600 / 60)
   local seconds = total_seconds % 60
-  return ("%d:%02d:%02d"):format(hours, minutes, seconds)
+  if hours > 0 then
+    return ("%d:%02d:%02d"):format(hours, minutes, seconds)
+  end
+  return ("%d:%02d"):format(minutes, seconds)
+end
+
+local function add_split_row(parent, name)
+  local row = parent.add({
+    type = "flow",
+    name = name,
+    direction = "horizontal"
+  })
+  row.style.horizontal_spacing = 6
+  row.style.vertically_stretchable = false
+  local title = row.add({
+    type = "label",
+    name = "title"
+  })
+  title.style.horizontally_stretchable = true
+  row.add({
+    type = "label",
+    name = "time"
+  })
+  return row
 end
 
 local function build(player)
   local hud = player.gui.left.add({
-    type = "flow",
+    type = "frame",
     name = HUD_NAME,
     direction = "vertical"
   })
-  hud.style.width = HUD_WIDTH
+  hud.style.padding = 6
+  hud.style.natural_width = HUD_WIDTH + 12
 
   local header = hud.add({
     type = "flow",
     name = HEADER_NAME,
     direction = "horizontal"
   })
-  header.add({
+  header.style.vertical_align = "center"
+  header.style.horizontally_stretchable = true
+  local plan_name = header.add({
     type = "label",
     name = PLAN_NAME
   })
-  header[PLAN_NAME].style.horizontally_stretchable = true
+  plan_name.style.horizontally_stretchable = true
+  plan_name.style.font = "default-bold"
+  header.add({
+    type = "label",
+    name = CLOCK_NAME
+  })
   local next_plan_button = header.add({
     type = "sprite-button",
     name = NEXT_PLAN_BUTTON_NAME,
+    style = "frame_action_button",
     sprite = "utility/right_arrow",
     tooltip = "Load the next [LP] blueprint book in your library."
   })
-  next_plan_button.style.width = 16
-  next_plan_button.style.height = 16
+  next_plan_button.style.width = 20
+  next_plan_button.style.height = 20
+  next_plan_button.style.padding = 0
 
-  hud.add({
-    type = "label",
-    name = PREVIOUS_NAME
-  })
-  hud.add({
-    type = "label",
-    name = CURRENT_NAME
-  })
+  local previous = add_split_row(hud, PREVIOUS_NAME)
+  previous.title.style.font_color = DIM_COLOR
+  previous.time.style.font_color = DIM_COLOR
+
+  local current = add_split_row(hud, CURRENT_NAME)
+  current.title.style.font = "default-bold"
+  current.time.visible = false
+
   tri_color_progress_bar.add(hud, CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH, CONSTRUCTION_ICON)
   icon_quantity_list.add(hud, CONSTRUCTION_SHORTFALLS_NAME, HUD_WIDTH)
   tri_color_progress_bar.add(hud, RESEARCH_PROGRESS_NAME, HUD_WIDTH, RESEARCH_ICON)
   icon_quantity_list.add(hud, RESEARCH_SHORTFALLS_NAME, HUD_WIDTH)
-  hud.add({
-    type = "button",
-    name = ADVANCE_SPLIT_BUTTON_NAME,
-    style = "transparent_button",
-    tooltip = "Mark the current split complete."
+
+  local next_row = hud.add({
+    type = "flow",
+    name = NEXT_ROW_NAME,
+    direction = "horizontal"
   })
-  hud[ADVANCE_SPLIT_BUTTON_NAME].style.font_color = NEXT_SPLIT_COLOR
-  hud[ADVANCE_SPLIT_BUTTON_NAME].style.hovered_font_color = NEXT_SPLIT_HOVER_COLOR
-  hud[ADVANCE_SPLIT_BUTTON_NAME].style.clicked_font_color = NEXT_SPLIT_HOVER_COLOR
-  tri_color_progress_bar.add(hud, NEXT_SPLIT_PRODUCTION_PROGRESS_NAME, HUD_WIDTH, CONSTRUCTION_ICON)
+  next_row.style.vertical_align = "center"
+  next_row.style.horizontal_spacing = 4
+  local next_title = next_row.add({
+    type = "label",
+    name = NEXT_TITLE_NAME
+  })
+  next_title.style.horizontally_stretchable = true
+  next_title.style.font_color = NEXT_COLOR
+  local advance_button = next_row.add({
+    type = "sprite-button",
+    name = ADVANCE_SPLIT_BUTTON_NAME,
+    style = "frame_action_button",
+    sprite = "utility/right_arrow",
+    tooltip = "Advance to this split (Shift+Period)."
+  })
+  advance_button.style.width = 20
+  advance_button.style.height = 20
+  advance_button.style.padding = 0
+
+  tri_color_progress_bar.add(hud, NEXT_SPLIT_PRODUCTION_PROGRESS_NAME, HUD_WIDTH, PRODUCTION_ICON)
   icon_quantity_list.add(hud, NEXT_SPLIT_PRODUCTION_SHORTFALLS_NAME, HUD_WIDTH)
 
   return hud
@@ -112,50 +170,66 @@ function M.hide(player)
   end
 end
 
+local function hud_needs_rebuild(hud)
+  return hud.type ~= "frame"
+    or hud[HEADER_NAME] == nil
+    or hud[HEADER_NAME][CLOCK_NAME] == nil
+    or hud[NEXT_ROW_NAME] == nil
+end
+
 function M.refresh(player, view)
   if not (player and player.valid) then
     return
   end
 
-  local hud = player.gui.left[HUD_NAME] or build(player)
+  local existing = player.gui.left[HUD_NAME]
+  if existing and hud_needs_rebuild(existing) then
+    existing.destroy()
+    existing = nil
+  end
+  local hud = existing or build(player)
   local header = hud[HEADER_NAME]
   local plan_name = header[PLAN_NAME]
+  local clock = header[CLOCK_NAME]
   local previous = hud[PREVIOUS_NAME]
   local current = hud[CURRENT_NAME]
   local construction = hud[CONSTRUCTION_PROGRESS_NAME]
   local research = hud[RESEARCH_PROGRESS_NAME]
   local construction_shortfalls = hud[CONSTRUCTION_SHORTFALLS_NAME]
   local research_shortfalls = hud[RESEARCH_SHORTFALLS_NAME]
-  local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
+  local next_row = hud[NEXT_ROW_NAME]
+  local next_title = next_row[NEXT_TITLE_NAME]
   local next_split_production = hud[NEXT_SPLIT_PRODUCTION_PROGRESS_NAME]
   local next_split_production_shortfalls = hud[NEXT_SPLIT_PRODUCTION_SHORTFALLS_NAME]
 
   if not view then
     plan_name.caption = "No active speedrun"
+    clock.caption = ""
     previous.visible = false
     current.visible = false
     construction.visible = false
     research.visible = false
     construction_shortfalls.visible = false
     research_shortfalls.visible = false
-    advance_split_button.visible = false
+    next_row.visible = false
     next_split_production.visible = false
     next_split_production_shortfalls.visible = false
     return
   end
 
-  plan_name.caption = view.plan_label
+  plan_name.caption = display_plan_label(view.plan_label)
+  clock.caption = game_time_caption(view.game_tick)
   current.visible = true
+  current.title.caption = view.current_split_label
 
   if view.previous_split_label then
     previous.visible = true
-    previous.caption = view.previous_split_label
-      .. "  " .. game_time_caption(view.previous_split_finished_tick)
+    previous.title.caption = view.previous_split_label
+    previous.time.caption = game_time_caption(view.previous_split_finished_tick)
   else
     previous.visible = false
   end
 
-  current.caption = view.current_split_label .. "  " .. game_time_caption(view.game_tick)
   if view.construction_progress then
     tri_color_progress_bar.refresh(construction, view.construction_progress)
     icon_quantity_list.refresh(construction_shortfalls, view.construction_progress.unfinished_items)
@@ -170,8 +244,13 @@ function M.refresh(player, view)
     research.visible = false
     research_shortfalls.visible = false
   end
-  advance_split_button.visible = view.next_split_label ~= nil
-  advance_split_button.caption = view.next_split_label or ""
+
+  if view.next_split_label then
+    next_row.visible = true
+    next_title.caption = view.next_split_label
+  else
+    next_row.visible = false
+  end
   if view.next_split_production_progress then
     tri_color_progress_bar.refresh(next_split_production, view.next_split_production_progress)
     icon_quantity_list.refresh(
