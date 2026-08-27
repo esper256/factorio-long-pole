@@ -1,9 +1,13 @@
 -- Entity removal: player/robot/platform mining, death, and script destroy.
 --
--- Placeable buildings unplace the placement item. Trees, rocks, and other
--- non-resource entities without a placement item (crash-site wrecks) harvest
--- returned buffer items. Those drops are not in production statistics.
--- Player-built chests have a placement item, so emptying them is not harvest.
+-- Placeable buildings unplace the placement item.
+-- Trees, rocks, fish, and crash-site wrecks harvest returned buffer items.
+-- Those drops are not in production statistics.
+--
+-- Ore patches ARE in production statistics. Never harvest them, even if they
+-- have no placement item. A type=="resource" check is not enough if that
+-- string ever differs; resource_category is the prototype flag that means
+-- "this is an ore patch / oil well."
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
@@ -17,10 +21,18 @@ M.event_names = {
   "script_raised_destroy"
 }
 
+-- Only these map objects drop items that Factorio omits from production stats.
 local HARVESTED_ENTITY_TYPES = {
   tree = true,
   ["simple-entity"] = true,
+  ["simple-entity-with-owner"] = true,
   fish = true
+}
+
+local WRECK_ENTITY_TYPES = {
+  container = true,
+  ["logistic-container"] = true,
+  ["infinity-container"] = true
 }
 
 local function product_counts(items)
@@ -46,14 +58,23 @@ local function placement_item(entity)
   return items_to_place[1]
 end
 
+local function is_ore_patch(entity)
+  if entity.type == "resource" then
+    return true
+  end
+  local prototype = entity.prototype
+  return prototype ~= nil and prototype.resource_category ~= nil
+end
+
 local function is_loot_source(entity)
-  if entity.type == "resource" or entity.type == "entity-ghost" then
+  if is_ore_patch(entity) or entity.type == "entity-ghost" then
     return false
   end
   if HARVESTED_ENTITY_TYPES[entity.type] then
     return true
   end
-  return placement_item(entity) == nil
+  -- Crash-site wrecks have no placement item and are not in production stats.
+  return WRECK_ENTITY_TYPES[entity.type] == true and placement_item(entity) == nil
 end
 
 local function returned_placement_item_counts(entity, returned_items)
@@ -73,7 +94,7 @@ end
 
 function M.on_event(event)
   local entity = event.entity
-  if not entity or entity.type == "entity-ghost" or entity.type == "resource" then
+  if not entity or entity.type == "entity-ghost" or is_ore_patch(entity) then
     return
   end
 

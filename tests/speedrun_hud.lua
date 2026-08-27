@@ -1,7 +1,8 @@
--- The gameplay HUD creates a compact panel, updates captions in place, and
--- disappears completely when there is no active plan.
+-- The gameplay HUD creates a compact framed panel, updates captions in place,
+-- and stays visible with an empty state when there is no active plan.
 local function element(parent, specification)
   local child = {
+    type = specification.type,
     name = specification.name or "",
     caption = specification.caption,
     sprite = specification.sprite,
@@ -50,7 +51,7 @@ local player = {
 
 local hud = require("hud.speedrun_hud")
 hud.refresh(player, {
-  plan_label = "Any% practice",
+  plan_label = "Any% practice [LP]",
   current_split_label = "Burner phase",
   next_split_label = "Automation",
   game_tick = 3660,
@@ -86,14 +87,17 @@ hud.refresh(player, {
 local hud_element = left.long_pole_speedrun_hud
 local header = hud_element.speedrun_header
 assert(hud_element ~= nil)
+assert(hud_element.type == "frame")
 assert(header.active_speedrun_name.caption == "Any% practice")
-assert(hud_element.current_split.caption == "Burner phase  0:01:01")
-assert(hud_element.long_pole_advance_split.caption == "Automation")
+assert(header.game_clock.caption == "1:01")
+assert(hud_element.current_split.title.caption == "Burner phase")
+assert(hud_element.next_split_row.next_split_title.caption == "Automation")
 assert(hud_element.previous_split.visible == false)
 assert(header.long_pole_next_plan.sprite == "utility/right_arrow")
-assert(header.long_pole_next_plan.style.width == 16)
+assert(header.long_pole_next_plan.style.width == 20)
 assert(hud_element.construction_progress.indicator_icon.sprite == "item/blueprint")
 assert(hud_element.research_progress.indicator_icon.sprite == "utility/technology_white")
+assert(hud_element.next_split_production_progress.indicator_icon.sprite == "item/iron-gear-wheel")
 assert(hud_element.extra_item_progress == nil)
 assert(hud_element.construction_progress.segments.done.style.width == 72)
 assert(hud_element.construction_progress.segments.pending.style.width == 54)
@@ -108,7 +112,7 @@ assert(hud_element.next_split_production_shortfalls.entry_1.item_icon.sprite == 
 assert(hud_element.next_split_production_shortfalls.entry_1.quantity.caption == "7")
 
 hud.refresh(player, {
-  plan_label = "Any% practice",
+  plan_label = "Any% practice [LP]",
   previous_split_label = "Burner phase",
   previous_split_finished_tick = 3600,
   current_split_label = "Automation",
@@ -116,10 +120,12 @@ hud.refresh(player, {
 })
 
 assert(header.active_speedrun_name.caption == "Any% practice")
+assert(header.game_clock.caption == "1:02")
 assert(hud_element.previous_split.visible == true)
-assert(hud_element.previous_split.caption == "Burner phase  0:01:00")
-assert(hud_element.current_split.caption == "Automation  0:01:02")
-assert(hud_element.long_pole_advance_split.visible == false)
+assert(hud_element.previous_split.title.caption == "Burner phase")
+assert(hud_element.previous_split.time.caption == "1:00")
+assert(hud_element.current_split.title.caption == "Automation")
+assert(hud_element.next_split_row.visible == false)
 assert(hud_element.construction_shortfalls.visible == false)
 assert(hud_element.research_shortfalls.visible == false)
 assert(hud_element.next_split_production_progress.visible == false)
@@ -130,5 +136,5 @@ assert(left.long_pole_speedrun_hud ~= nil)
 assert(header.active_speedrun_name.caption == "No active speedrun")
 assert(hud_element.previous_split.visible == false)
 assert(hud_element.current_split.visible == false)
-assert(hud_element.long_pole_advance_split.visible == false)
+assert(hud_element.next_split_row.visible == false)
 assert(header.long_pole_next_plan.sprite == "utility/right_arrow")

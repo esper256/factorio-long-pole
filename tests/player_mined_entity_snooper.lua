@@ -114,6 +114,41 @@ snooper.on_event({
 
 assert(surface.products["iron-ore"] == nil)
 
+-- Ore patches can still be identified when type is not the string "resource".
+-- Production statistics own these; harvesting them double-counts.
+snooper.on_event({
+  entity = {
+    name = "copper-ore",
+    type = "resource-entity",
+    surface = { name = "nauvis" },
+    prototype = {
+      resource_category = "basic-solid"
+    }
+  },
+  buffer = {
+    get_contents = function()
+      error("ore patches with resource_category must not be harvested")
+    end
+  }
+})
+assert(surface.products["copper-ore"] == nil)
+
+-- A non-wreck, non-rock entity without a placement item is not a harvest source.
+snooper.on_event({
+  entity = {
+    name = "character-corpse",
+    type = "character-corpse",
+    surface = { name = "nauvis" },
+    prototype = {}
+  },
+  buffer = {
+    get_contents = function()
+      return { { name = "firearm-magazine", count = 10 } }
+    end
+  }
+})
+assert(surface.products["firearm-magazine"] == nil)
+
 -- Unplace without a recorded placement must not assert.
 snooper.on_event({
   entity = {
