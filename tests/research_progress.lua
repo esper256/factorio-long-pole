@@ -47,6 +47,7 @@ assert(progress.pending == 0)
 assert(progress.working_labs == 2)
 assert(progress.unfinished_items[1].item_name == "automation-science-pack")
 assert(progress.unfinished_items[1].count == 5)
+assert(progress.unfinished_items[1].produced_per_minute == 24)
 assert(progress.tooltip == "Research: 25 consumed in labs · 5 remaining · 2 labs working")
 
 force.research_progress = 0.91

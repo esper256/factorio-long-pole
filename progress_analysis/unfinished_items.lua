@@ -2,6 +2,25 @@
 -- time when present (the long pole); fall back to remaining count.
 local M = {}
 
+function M.accumulate(into, blocker)
+  local existing = into[blocker.item_name]
+  if not existing then
+    into[blocker.item_name] = {
+      item_name = blocker.item_name,
+      count = blocker.count,
+      eta_ticks = blocker.eta_ticks,
+      produced_per_minute = blocker.produced_per_minute or 0
+    }
+    return
+  end
+  existing.count = existing.count + blocker.count
+  existing.eta_ticks = math.max(existing.eta_ticks or 0, blocker.eta_ticks or 0)
+  existing.produced_per_minute = math.max(
+    existing.produced_per_minute or 0,
+    blocker.produced_per_minute or 0
+  )
+end
+
 function M.sort(entries)
   table.sort(entries, function(left, right)
     local left_eta = left.eta_ticks

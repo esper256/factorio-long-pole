@@ -12,9 +12,9 @@ This is a **single-player** practice mod. Do not design around multiplayer. Harm
 
 **1. Long pole.** The long pole is not a single named station. It is the **ordering** of everything that still has to happen before the run can advance. Sort by **anticipated arrival time**. The item predicted to arrive last *is* the long pole.
 
-**2. ETA.** Every craft counts (hand and machine). Prefer recent crafting/production rates. To keep zero-rate items sortable, each item’s finish time assumes the player is also **handcrafting that item nonstop** on top of the observed factory rate. That avoids a pile of equal infinities.
+**2. ETA.** Every craft counts (hand and machine). Prefer recent crafting/production rates. To keep zero-rate items sortable, each item’s finish time assumes the player is also **handcrafting that item nonstop** on top of the observed factory rate. That avoids a pile of equal infinities. On the HUD: if the factory (or labs) has a known rate, show that ETA; if the rate is zero, show remaining count. Sort by ETA either way, longest pole first.
 
-**3. What to show (starting rule; still tunable).** Prefer the **limiting ingredient**, not the unfinished finished good, when an intermediate is the real blocker.
+**3. What to show (starting rule; still tunable).** Prefer the **limiting ingredient**, not the unfinished finished good, when an intermediate is the real blocker. That applies to current-split construction shortfalls and next-split production.
 
 Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**, not belts. Placing gear assemblers produces more. Placing belt assemblers with no gears produces nothing. If plates are also missing, show plates. Walk the chain toward root ingredients and surface the ones that are actually blocking.
 
