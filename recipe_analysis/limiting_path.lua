@@ -47,6 +47,13 @@ local function merge_blocker(blockers_by_name, blocker)
   )
 end
 
+local function consume_stock(context, name, amount)
+  if context.take_stock then
+    return context.take_stock(name, amount)
+  end
+  return math.min(context.loose_stock(name), math.max(0, amount or 0))
+end
+
 local function walk(item_name, remaining, context, depth, blockers_by_name)
   remaining = math.max(0, remaining or 0)
   if remaining <= 0 or depth > 8 then
@@ -75,8 +82,8 @@ local function walk(item_name, remaining, context, depth, blockers_by_name)
     for _, ingredient in ipairs(choice.recipe.ingredients or {}) do
       if ingredient.type ~= "fluid" then
         local need = batches * (ingredient.amount or 0)
-        local have = context.loose_stock(ingredient.name)
-        local still = need - have
+        local used = consume_stock(context, ingredient.name, need)
+        local still = need - used
         if still > 0 then
           ingredient_shortfall = true
           walk(ingredient.name, still, context, depth + 1, blockers_by_name)
