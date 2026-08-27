@@ -131,7 +131,7 @@ local function maybe_auto_import_plan_for_player(player)
     return
   end
 
-  local ok = plan_storage.import_first_plan_from_blueprint_library(player, storage, game)
+  local ok = plan_storage.import_first_plan_from_blueprint_library(player, storage)
   if not ok then
     return
   end

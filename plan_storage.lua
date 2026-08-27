@@ -404,6 +404,7 @@ function M.import_plan_from_source(source, state)
     return false, error_message
   end
 
+  -- PRODUCT.md §18: import always replaces the save's active plan.
   apply_active_plan(state, plan, "imported")
   return true, nil
 end
@@ -413,12 +414,13 @@ function M.import_plan_from_cursor(player, state)
   return M.import_plan_from_source(source, state)
 end
 
-function M.import_first_plan_from_blueprint_library(player, state, game_script)
-  local match = blueprint_library.find_first_blueprint_book_matching(player, game_script, function(record)
+function M.import_first_plan_from_blueprint_library(player, state)
+  -- PRODUCT.md §20: player library only. Game/shared libraries are a multiplayer feature.
+  local match = blueprint_library.find_first_player_blueprint_book_matching(player, function(record)
     return M.is_importable_plan_book(record)
   end)
   if not match then
-    return false, "No Long Pole plan book was found in the blueprint library."
+    return false, "No Long Pole plan book was found in the player blueprint library."
   end
 
   return M.import_plan_from_source(match.record, state)

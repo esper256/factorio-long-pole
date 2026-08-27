@@ -1,8 +1,10 @@
 # Architecture
 
+Canonical product rules live in [`PRODUCT.md`](PRODUCT.md). That file overrides this document on conflict. Deferred items in `PRODUCT.md` are sketches here, not current scope.
+
 ## Purpose
 
-This mod is intended to help people practice speedrunning **Factorio** version 2.0.76 including compatability with Space Age.
+Practice overlay for **vanilla Factorio 2.0** speedruns. Keep per-surface ledgers and recipe hooks so Space Age can land later; do not build SA play as a current feature.
 
 The general use case is:
 
@@ -13,34 +15,30 @@ The general use case is:
    - Mine 500+ coal from coal rocks.
    - Build a blueprint containing a boiler, steam engine, lab, and 10 red science packs.
 2. Start a new game and load the plan.
-3. Use the mod to identify which part of the current split is predicted to take the longest (the “long pole”).
+3. Use the mod to order what still has to happen before the next split by anticipated arrival time (the “long pole” is whatever is predicted to arrive last).
 
-Example: if the mod indicates **gear wheel assembly** is the long pole, the player should prioritize feeding iron plates into gear wheel assemblers before feeding electronic circuit assemblers.
+Example: if gears are predicted to arrive after circuits, the player should put plates into gear assemblers before circuit assemblers. Show the **limiting ingredient** when an intermediate is the real blocker (gears missing, plates in stock → show gears, not the unfinished belts).
 
 ## Core design philosophy
 
 The mod maintains an internal tally of what the player has access to by combining Factorio events and engine-maintained statistics to understand when items are:
 
-- created
+- created (produced, mined, harvested, or granted as starting/wreck loot)
 - consumed
-- destroyed
+- destroyed or spoiled
+- placed into the world
 
-This tally must account for items located across multiple places, including:
+**Loose stock** is created-minus-(placed|consumed|spoiled|destroyed). This is a heuristic, not a perfect census of every inventory slot.
 
-- the player’s inventory
-- chests (e.g., buffer chests, logistics chests)
-- items on transport belts
-- machine inventories (e.g., assembling machines)
+That tally is compared against the current split’s requirements. Combined with recent production rates **plus a hypothetical nonstop handcraft of each remaining item**, the mod estimates arrival times and sorts remaining work so the last-to-arrive item is the long pole.
 
-The internal tally is compared against the current split’s requirements to determine what is still missing. Combined with recent production rates, the mod estimates which requirement is most likely to be the long pole.
+Split fields and what they mean:
 
-Split requirements are intentionally divided into different completion semantics:
+- **Constructed Blueprints** describe the intended factory. Assume the player is building them (type counts, non-overlapping prints). Placement is a **bonus** signal. Production and loose stock are the real progress data. The player may advance or rewind splits at any time to clear mismatched placement state.
+- **Extra Stock** is additional demand **on this split**, added on top of the blueprints (map-seed-dependent belts, etc.). It is not “prepare for the next split.”
+- **Completed Research** is not “packs in a chest” and not a hidden tech-done flag. The last item in the goal is **labs consuming packs** so lab throughput is visible.
 
-- Blueprint entities are **placement goals**. A split is not done until those entities have been placed in the world.
-- Extra items are **stock goals**. They only need to exist in loose stock so the player can move on with enough materials.
-- Research entries are **completion goals**. The technology must actually be finished before the split is done.
-
-The split after the current one gets a separate readiness view. It should answer: "if the player advanced right now, is there enough loose stock left over to place the next split's expected entities and supply its extra stock targets?" That next-split readiness signal must stay visually distinct from the current split's build-completion signal.
+The split after the current one gets a separate readiness view from **that next split’s own blueprints and extras**, after reserving what the current split still needs. Extra Stock on the current split is not a proxy for that view.
 
 ## Major mod components
 
@@ -50,18 +48,19 @@ The mod has three primary components.
 
 An in-game display in the **upper-left** corner showing a vertical stack of rows representing splits the player cares about.
 
-Default behavior (configurable via settings):
+Default rows:
 
-- Previous split at the top
+- Exactly **one** previous split at the top (yardstick for “ahead/behind of a usual run”; older splits are clutter)
 - Current in-progress split directly below
-- A configurable number of upcoming splits below the current split
+- Upcoming splits below that (how many, and how next-split readiness is visually distinct, is deferred HUD polish)
 
-Each split should have the following columns:
+Each split should have:
+
 - The name of the split (Power plant, On-patch burners, etc)
-- The elapsed time compared to previous best timing on the split -3:02 would mean 3 minutes 2 seconds faster than previous record, +1:06 would mean one minute and six seconds slower than fastest attempt at the split
-- For the current split, a truncated list of the missing items and intermediates sorted by how long they are predicted to take before the split is complete. Blueprint-backed items in this list represent **entities that still need to be placed**, while research-backed items represent **science and research still needed to finish the split**.
-- For the next split, a separate readiness view showing whether enough loose stock exists to place the next split's required entities and satisfy its extra stock targets after reserving what the current split still needs.
-- On the current split only an extra column that is a button for completing the split and advancing to the next one. This one should turn green once the mod predicts all intended production, build and research objectives have been completed.
+- Current-attempt elapsed time on the current split (personal-best deltas vs a stored record are deferred; see `PRODUCT.md` §7)
+- For the current split, a truncated list of remaining work sorted by anticipated arrival time. Prefer limiting ingredients over unfinished finished goods when the chain is blocked mid-way. Research rows should expose **lab consumption of packs**, so a lab-limited split is obvious.
+- For the next split, readiness from that split’s blueprints and extras after reserving current-split demand.
+- On the current split, a control to advance. The player must also be able to go **back or forward at any time** via shortcut keys, including when objectives are incomplete. Do not block navigation on “ready.” HUD chrome (separate green Complete vs stopwatch) is deferred.
 
 ### 2) Run plan editor
 
@@ -72,9 +71,9 @@ The plan editor must be treated as a **dense information workspace**, not a spac
 Each split includes:
 
 - a name
-- a list of blueprints whose entities must be placed before the split is considered complete
-- a list of additional stock items that should be available before moving on, but do not need to be placed
-- a list of technologies that must be completed before proceeding to the next split
+- a list of blueprints describing the factory the player is assumed to be building (non-overlapping; type counts only)
+- Extra Stock: additional current-split item demand on top of those blueprints, for map-seed-dependent bits. Not next-split prep.
+- technologies whose **lab pack consumption** is part of this split’s remaining work
 
 The editor also surfaces supporting information to help with planning decisions, such as:
 
@@ -83,9 +82,9 @@ The editor also surfaces supporting information to help with planning decisions,
 
 The editor should label these columns using their completion semantics, not just their data type. A good default vocabulary is:
 
-- `Constructed Blueprints`: entities from these blueprints must be placed in the world
-- `Extra Stock`: these items only need to exist in loose stock
-- `Completed Research`: these technologies must be finished
+- `Constructed Blueprints`: assumed build; production of their items is the real signal
+- `Extra Stock`: extra current-split demand, added to the prints
+- `Completed Research`: labs processing the packs for these techs
 
 ### Plan editor layout principles
 
@@ -99,9 +98,11 @@ The editor should follow a few explicit layout rules:
 
 In practice this means the default response to "we need another control" should not be "give it a dedicated spacious region". The default response should be "how do we integrate it into the existing dense layout without stealing attention from the primary planning data?"
 
-Undecided: Many blueprints are staged in that they include items from the previous blueprint in addition to the new entities. There needs to be some way to not double count the old entitities that were already build in a previous blueprint.
+Deferred (`PRODUCT.md` §9): staged/overlapping blueprints that repeat earlier entities. Assume non-overlapping prints for now.
 
 ### Blueprint association and refresh model
+
+Deferred as a product (`PRODUCT.md` §13). Keep storing a snapshot plus link hints when the player associates a **held** blueprint. Do not implement `Refresh Linked Blueprints`, fuzzy matching, or resolution-state badges until that question is revived. The rest of this section is a sketch only.
 
 Associating blueprints with splits is foundational to the usefulness of the planner, but Factorio does not expose a reliable global identity system for arbitrary player-created library blueprints that the mod can treat as a permanent canonical ID. The design should therefore use a **heuristic link model** rather than pretending that blueprint references are perfectly durable.
 
@@ -217,9 +218,10 @@ This component watches Factorio events and statistics and maintains the runtime 
 - Use per-surface force item production statistics for automated production deltas.
 - Use craft, build, mine, and destroy events for hand crafting, placed entities, mined returns, and explicit losses.
 - Maintain per-surface ledgers for production totals, manual-crafted totals, loose stock estimates, placed entities, and uncertainty state.
-- Track placed entities separately from loose stock. They count toward build progress, but they are not next-split loose surplus unless mined back.
+- Track placed entities separately from loose stock. Placement is bonus progress. Placed items are not next-split loose surplus unless mined back.
 - Stay event-first in normal play. Do not rely on recurring reconciliation scans.
-- If exact loose-stock accounting becomes impossible after destruction, mark the surface uncertain instead of inventing certainty.
+- Loose stock is a heuristic (created minus placed/consumed/spoiled/destroyed). If destruction makes the estimate worse, mark the surface uncertain rather than inventing certainty.
+- Starting/wreck loot must be granted into loose stock explicitly; taking items out of chests is not production.
 - The first debug surface should be a hover popup on `Splits` showing item icon, placed count, loose stock estimate, and uncertainty status.
 
 #### Known loose-stock limitations
@@ -229,7 +231,7 @@ This component watches Factorio events and statistics and maintains the runtime 
 - There is no general event for arbitrary machine, chest, belt, or inserter inventory changes. Player inventories have dedicated events, but ordinary entity inventories do not, so the tracker cannot learn about every loose-stock change from one universal hook.
 - Script or mod actions can bypass the player-style lifecycle. Script destruction is only visible when code raises `script_raised_destroy`, and `LuaEntity.destroy()` does not raise it unless requested. Script mining can also drop or destroy results depending on how it is called.
 - Mapping a placed entity back to an item is not always unique. `LuaEntityPrototype.items_to_place_this` can contain multiple items, and the docs note that construction bots choose the first item in the list, so some prototypes are inherently ambiguous if different placeable items create the same entity.
-- Any intentionally untracked carrier will be a known source of drift. The tracker can read many inventories and transport lines, but if a storage location is outside the first supported set, the mod should document it as unsupported instead of pretending the estimate is exact.
+- Location-perfect accounting is not required. Drift from destroyed containers, bots in transit, or unobserved inventories is expected; treat the ledger as a heuristic (`PRODUCT.md` §14).
 
 ## Persistent plan storage and cross-save transfer
 
@@ -239,7 +241,8 @@ Speedrunners need to be able to design a plan in one save, then start a fresh ru
 
 - Plans must survive across saves without requiring external files.
 - Each save should have exactly one active working plan in `storage`.
-- Importing a plan into a fresh save should be explicit and cursor-driven.
+- Importing a plan **always replaces** the save’s active plan (no merge, no confirm).
+- Auto-import on new game, if enabled, searches the **player** blueprint library only.
 - The storage format should be versioned so that future mod releases can migrate old plans.
 - The in-save working copy of the plan should remain in `storage`; the portable copy is an explicit export artifact.
 - The export format should be understandable enough that advanced users can manually inspect and occasionally edit it by hand.
@@ -251,7 +254,7 @@ The mod should keep one editable plan in save-local `storage` and treat blueprin
 The upper-left action button is the only entry point:
 
 - If the player is not holding a valid Long Pole plan book, clicking it creates a new empty plan and opens the editor.
-- If the player is holding a valid Long Pole plan book in the cursor, clicking it imports that plan and opens the editor.
+- If the player is holding a valid Long Pole plan book in the cursor, clicking it **replaces** the active plan with that import and opens the editor.
 
 The exported blueprint book should contain:
 
@@ -352,12 +355,7 @@ This avoids separator-escaping problems when blueprint book names contain charac
 
 ### Reference exports versus copied exports
 
-The storage model should explicitly distinguish between:
-
-- **Reference export**: split books contain lightweight blueprint link entries with planning fingerprints.
-- **Copied export**: split books contain full copied blueprints so the plan is self-contained and shareable with players who do not have the same blueprint library.
-
-The current default format is reference export. A future option may enable copied exports without changing the surrounding book-of-books structure.
+Deferred (`PRODUCT.md` §19). Ship the current **reference-style** nested plan book only. Do not add a second “copied blueprint” export mode or extra `visibility=` values until that product question is revived.
 
 ### Why description text is acceptable here
 
@@ -378,7 +376,7 @@ The import workflow should be:
 3. The mod validates the top-level plan book description.
 4. The mod reads child split books in inventory order.
 5. The mod reads each split book description plus its child blueprint-link entries.
-6. The decoded plan replaces the save's working plan in `storage`.
+6. The decoded plan **always replaces** the save's working plan in `storage`.
 
 The export workflow should be the inverse:
 
@@ -410,3 +408,5 @@ The architecture should support fallback import/export methods later, but they s
 - Ensure the mod works as designed and the GUI is intuitive.
 - Maintain Factorio performance for bases typical of speedrunning (not megabases).
 - Provide tests that validate the mod’s logic without requiring Factorio to be launched.
+- Single-player first. Do not add MP architecture. Cheap “does not crash with a second player” is enough.
+- Recipe-selection and ETA heuristics must stay behind a small replaceable API (`PRODUCT.md` §4). Do not fold a single oil/recycling policy into `build_requirements` call sites.

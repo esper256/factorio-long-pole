@@ -649,7 +649,7 @@ default_surface=nauvis
     assert.are.equal("Auto Imported Split", state.splits[1].name)
   end)
 
-  it("falls back to game blueprint library plan books when the player shelf has none", function()
+  it("does not auto-import plan books from the game blueprint library", function()
     local state = {}
     tracker.init(state)
 
@@ -696,11 +696,9 @@ From shared library.
 
     local ok, error_message = plan_storage.import_first_plan_from_blueprint_library(player, state, game_script)
 
-    assert.is_true(ok)
-    assert.is_nil(error_message)
-    assert.are.equal("Shared Imported Plan", state.plan_name)
-    assert.are.equal("shared-plan", state.plan_id)
-    assert.are.equal("Shared Imported Split", state.splits[1].name)
+    assert.is_false(ok)
+    assert.are.equal("No Long Pole plan book was found in the player blueprint library.", error_message)
+    assert.is_nil(state.plan_id)
   end)
 
   it("recovers plan and split labels from exported record data when record labels are unavailable", function()

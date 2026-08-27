@@ -1,3 +1,8 @@
+-- Requirement expansion and missing-work summaries. PRODUCT.md:
+-- §3 show limiting ingredients; §4 keep recipe choice replaceable (do not bake
+-- one oil/recycling tree into callers); §5 research's last item is lab pack
+-- consumption; §12 Extra Stock adds to this split's blueprints, it is not
+-- next-split prep.
 local M = {}
 local config = require("build_requirements_config")
 local recipe_resolver = require("util.recipe_resolver")
@@ -382,8 +387,8 @@ local function build_root_requirements(split, options)
   if include_technologies then
     for _, technology in ipairs(split.technologies or {}) do
       if technology.name and technology.name ~= "" then
-        -- Research completion is not tracked per split yet, so we only count loose
-        -- packs here until a split-scoped research progress source exists.
+        -- PRODUCT.md §5: the last research item is labs consuming packs. Until a
+        -- lab-throughput source exists, loose packs are a stand-in, not the goal.
         for _, component in ipairs(resolve_technology_components(technology.name)) do
           add_root_requirement(
             root_requirements,
@@ -540,6 +545,9 @@ local function requirement_progress_to_summary(entries_by_key)
   return summary
 end
 
+-- Current default: pick the recipe whose remaining-ingredient score is lowest.
+-- PRODUCT.md §4: this policy must stay swappable. Do not spread oil-ratio or
+-- similar heuristics into summarize_missing_requirements call sites.
 local function choose_recipe_for_missing_requirement(kind, name, remaining_count, context, active_stack)
   local matching_recipes = context.resolve_recipe_set(kind, name, context.surface_name) or {}
   local best_candidate = nil
