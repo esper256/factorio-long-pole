@@ -1,4 +1,4 @@
--- Exercises one real-event-shaped input without launching Factorio.
+-- Hand-mined and drill-mined ore are production statistics only.
 storage = {}
 defines = {
   events = {

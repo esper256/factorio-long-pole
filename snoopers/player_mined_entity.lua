@@ -1,14 +1,12 @@
 -- Entity removal: player/robot/platform mining, death, and script destroy.
 --
 -- Placeable buildings unplace the placement item.
--- Trees, rocks, fish, and crash-site wrecks harvest returned buffer items.
--- Those drops are not in production statistics.
+-- Trees, rocks, fish, and crash-site wrecks harvest returned buffer items
+-- because those drops are not on the production graph (PRODUCT.md §14).
 --
--- Ore patches ARE in production statistics. Identify them by the named
--- prototype (`prototypes.entity[entity.name]`), not only `entity.type` /
--- `entity.prototype`. Those accessors can fail on a resource that is about
--- to be destroyed, which is how hand-mining copper was harvested and then
--- counted again from the production graph.
+-- Ore patches are not tracked here. Hand mining and mining drills both
+-- already increment Factorio production statistics; that graph is the only
+-- source for patch ore. Ignore resource entities entirely.
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
@@ -84,24 +82,22 @@ local function buffer_counts(event)
 end
 
 local function placement_item(entity)
-  local items_to_place = entity_prototype(entity) and entity_prototype(entity).items_to_place_this
+  local proto = entity_prototype(entity)
+  local items_to_place = proto and proto.items_to_place_this
   if not items_to_place or #items_to_place == 0 then
     return nil
   end
   return items_to_place[1]
 end
 
--- Resource entities are named after the item they drop (`copper-ore`, etc.).
--- That name lookup works even when the dying entity's type accessor does not.
+-- Production statistics already count this ore. Named-prototype lookup is used
+-- because a dying resource may not expose entity.type.
 local function is_ore_patch(entity)
   if entity_type_name(entity) == "resource" then
     return true
   end
   local proto = entity_prototype(entity)
-  if proto and (proto.type == "resource" or proto.resource_category ~= nil) then
-    return true
-  end
-  return false
+  return proto ~= nil and (proto.type == "resource" or proto.resource_category ~= nil)
 end
 
 local function is_loot_source(entity)

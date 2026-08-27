@@ -133,8 +133,8 @@ snooper.on_event({
 })
 assert(surface.products["copper-ore"] == nil)
 
--- A resource about to be destroyed may have no type/prototype accessors.
--- The named prototype must still prevent harvest so stats are not doubled.
+-- Patch ore is production-statistics only. A dying resource may have no
+-- type/prototype accessors; still do not harvest it.
 prototypes = {
   entity = {
     ["copper-ore"] = {
