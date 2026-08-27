@@ -569,6 +569,7 @@ local function requirement_progress_to_summary(entries_by_key)
 end
 
 -- PRODUCT.md §4: recipe choice lives in the replaceable heuristic module.
+-- Do not spread oil-ratio or similar heuristics into summarize_missing_requirements call sites.
 local function choose_recipe_for_missing_requirement(kind, name, remaining_count, context, active_stack)
   local matching_recipes = (context.resolve_recipe_set and context.resolve_recipe_set(kind, name, context.surface_name)) or {}
 
