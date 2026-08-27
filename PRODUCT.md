@@ -2,9 +2,11 @@
 
 Canonical product decisions for agents. If this file conflicts with `ARCHITECTURE.md` or comments, **this file wins**. Numbers match the 2026-08-27 clarification round.
 
-Vanilla Factorio 2.0 is the current product. Keep the data model able to grow into Space Age, but do not build SA-only surfaces, quality, spoilage, or platforms yet.
+Target **Factorio 2.1 experimental** (API 2.1.17 as of 2026-08-26). Keep the data model able to grow into Space Age, but do not build SA-only surfaces, quality, spoilage, or platforms as first-class split features yet. Cheap 2.1 compatibility (library `LuaRecord`, quality-summed production stats, space-platform build events) is fine.
 
 This is a **single-player** practice mod. Do not design around multiplayer. Harmless MP survival is fine if it is cheap.
+
+**Plan authoring is a blueprint book, not a custom editor.** Label the book so it ends in `[LP]`. Each page is a split (a blueprint, a flat book of blueprints, or a planner). Extra items and research go in the page description between `====== long-pole data-begin ======` / `====== long-pole data-end ======`. Do not add a plan-editor GUI.
 
 ## In scope
 
@@ -16,7 +18,7 @@ This is a **single-player** practice mod. Do not design around multiplayer. Harm
 
 Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**, not belts. Placing gear assemblers produces more. Placing belt assemblers with no gears produces nothing. If plates are also missing, show plates. Walk the chain toward root ingredients and surface the ones that are actually blocking.
 
-**4. Which recipe.** Recipe choice will stay contentious. The **selection heuristic must be a replaceable module** with a stable input/output API so approaches can change without thrashing callers. First playthrough stab: blend **observed recipe ratios** when several recipes make the same product (e.g. 50% basic oil + 50% advanced oil). The Factorio API may not expose this cleanly; that is a known risk, not a reason to hard-code one recipe tree into `build_requirements`.
+**4. Which recipe.** Recipe choice will stay contentious. The **selection heuristic must be a replaceable module** with a stable input/output API so approaches can change without thrashing callers. First playthrough stab: blend **observed recipe ratios** when several recipes make the same product (e.g. 50% basic oil + 50% advanced oil). The Factorio API may not expose this cleanly; that is a known risk, not a reason to hard-code one recipe tree into `progress_analysis`.
 
 **5. Research.** The last item in a research goal is **labs consuming packs into science**, not packs sitting in chests and not “tech researched” as an invisible flag. The HUD should make **lab throughput** visible so the player can tell they are lab-limited (more labs, lab research speed).
 
@@ -44,11 +46,11 @@ Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**
 
 **9. Staged / overlapping blueprints** (later prints that include earlier entities). Assume **non-overlapping** prints. Do not subtract previous splits’ entities.
 
-**13. `Refresh Linked Blueprints` matching pipeline** (exact / unique-name / fuzzy, resolution badges). Unclear product; leave the stored link snapshot as-is. Associating a held blueprint from the cursor is the current workflow.
+**13. `Refresh Linked Blueprints` matching pipeline** (exact / unique-name / fuzzy, resolution badges). Unclear product. The plan *is* the `[LP]` book; do not add a second link-refresh workflow.
 
 **15–16. Space Age play.** Quality, spoilage, platforms, other planets as first-class split surfaces. Keep the per-surface ledger so this can land later. Ship vanilla first.
 
-**19. `visibility=` / copied vs reference plan export.** Unexplained. Keep the current **reference-style** nested plan book. Do not add a second export mode.
+**19. `visibility=` / copied vs reference plan export.** Unexplained. The `[LP]` library book is the plan. Do not add a second export mode.
 
 **21. HUD polish** still open: how many upcoming splits, how next-split readiness is visually distinct from current-split placement, whether Complete is a separate green button vs the stopwatch. Do not churn layout until that round.
 

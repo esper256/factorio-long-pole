@@ -2,6 +2,6 @@
 
 Read `PRODUCT.md` first. It is the canonical product spec and **overrides** `ARCHITECTURE.md` wherever they disagree.
 
-`ARCHITECTURE.md` is the longer design sketch (storage format, tracker limitations, editor density). Anything `PRODUCT.md` marks **Deferred** is out of scope until the owner revives it.
+`ARCHITECTURE.md` is the longer design sketch for this rewrite (ledger, snoopers, HUD, book storage). Anything `PRODUCT.md` marks **Deferred** is out of scope until the owner revives it.
 
-Vanilla Factorio 2.0, single-player speedrun practice. Space Age and multiplayer are compatibility concerns, not current features.
+Factorio 2.1 experimental, single-player speedrun practice. Plans are `[LP]` blueprint books plus description metadata; there is no plan-editor GUI. Space Age play and multiplayer are compatibility concerns, not current features.
