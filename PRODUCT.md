@@ -16,6 +16,8 @@ This is a **single-player** practice mod. Do not design around multiplayer. Harm
 
 **3. What to show (starting rule; still tunable).** Prefer the **limiting ingredient**, not the unfinished finished good, when an intermediate is the real blocker. That applies to current-split construction shortfalls and next-split production.
 
+Loose stock is spent **once** across every requirement on the split. Extra `copper-ore`, a lab, and 10 red packs cannot each claim the same 15 ore.
+
 Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**, not belts. Placing gear assemblers produces more. Placing belt assemblers with no gears produces nothing. If plates are also missing, show plates. Walk the chain toward root ingredients and surface the ones that are actually blocking.
 
 **4. Which recipe.** Recipe choice will stay contentious. The **selection heuristic must be a replaceable module** with a stable input/output API so approaches can change without thrashing callers. First playthrough stab: blend **observed recipe ratios** when several recipes make the same product (e.g. 50% basic oil + 50% advanced oil). The Factorio API may not expose this cleanly; that is a known risk, not a reason to hard-code one recipe tree into `progress_analysis`.

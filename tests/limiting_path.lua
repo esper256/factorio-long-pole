@@ -25,13 +25,23 @@ prototypes = {
 local limiting_path = require("recipe_analysis.limiting_path")
 
 local function context_with(stock)
+  local pool = {}
+  for name, count in pairs(stock) do
+    pool[name] = count
+  end
   return {
     crafting_speed = 1,
     produced_per_minute = function()
       return 0
     end,
     loose_stock = function(item_name)
-      return stock[item_name] or 0
+      return pool[item_name] or 0
+    end,
+    take_stock = function(item_name, amount)
+      local have = pool[item_name] or 0
+      local used = math.min(have, math.max(0, amount or 0))
+      pool[item_name] = have - used
+      return used
     end
   }
 end
