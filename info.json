@@ -3,8 +3,9 @@
   "version": "0.0.1",
   "title": "Long Pole",
   "author": "Eric Friesen",
+  "homepage": "https://github.com/esper256/factorio-long-pole",
   "factorio_version": "2.1",
-  "description": "Speedrun planning and long-pole analysis for Factorio.",
+  "description": "Speedrun planning and long-pole analysis for Factorio 2.1 experimental.",
   "dependencies": [
     "base >= 2.1.0"
   ]

@@ -1,4 +1,11 @@
 Version: 0.0.1
+Date: 2026-08-27
+  Notes:
+    - Land the total rewrite on main for Factorio 2.1 experimental.
+    - Plans are [LP] blueprint books plus description metadata; no plan editor.
+    - Keep product rules from the 2026-08-27 clarification (PRODUCT.md).
+---------------------------------------------------------------------------------------------------
+Version: 0.0.1
 Date: 2026-07-22
   Notes:
     - Recreated the mod as a minimal loading skeleton for the rewrite.

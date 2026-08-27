@@ -1,8 +1,10 @@
 # Architecture
 
+Canonical product rules live in [`PRODUCT.md`](PRODUCT.md). That file overrides this document on conflict. Deferred items in `PRODUCT.md` are sketches here, not current scope.
+
 ## Purpose
 
-This mod is intended to help people practice speedrunning **Factorio** version 2.1.12 including compatability with Space Age.
+This mod is intended to help people practice speedrunning **Factorio 2.1 experimental** (API 2.1.17 as of 2026-08-26). Keep Space Age compatibility in the data model; do not build SA play as a current feature.
 
 The general use case is:
 
@@ -31,7 +33,7 @@ The mod source code must be well organized into the following major components
    - This will include a list of splits
    - Each split includes: a set of technologies that should be researched, a list of placement items derived from its blueprints (assemblers, inserters, transport belts, rails, etc) and their quantities, and a list of extra items that should be crafted or mined.
    - Splits might also include additional data such as record times the player has sped through the split, which is not really part of the split data but metadata saved to it. Keeping this cleanly separated will be good design.
-   - It is anticipated that the player will have a key that will mark a split as completed and move to the next split. It might be a feature of the mod to eventually be able to automatically determine if a split is complete and advance and that should be left open as a possible future feature, but not 1.0
+   - The player may advance or rewind splits at any time via shortcut keys (`PRODUCT.md` §6). Optional auto-advance already exists as a setting; do not make completion-gating the only way forward.
 3. A data component that represents an inferred game state tracking progress in the speedrun, this will be important to create mocks for tests
    - The game needs to track items and entities produced, consumed, placed and destroyed. The delta between produced and consumed+placed+destroyed should be considered loose_stock. The loose stock might be in the player's inventory, hidden as ingredients in their crafting queue, inside assembler buildings ingredient slots, on transporter belts or in chests (and other places not listed such as space platforms, etc). It's not important for the data object to track where the item is, only to do a best effort not to lose track of it. It's possible that the ground truth source may come from infrequent access to the production statistics graph which doesn't update every tick. So it's possible for there to be some kind of reckoning which overwrites some assumptions on how many items have been produced or consumed so it is possible that numbers that shouldn't be able to go down, do.
    - The data component should not denormalize Factorio game data that is available from a perfect source of truth API (likely something like elapsed game time), however if possible, in the most canonical LUA way, it should provide an indirection to that data, so that a mock data for tests has everything that the GUI needs to read and display etc.
@@ -48,14 +50,14 @@ The mod source code must be well organized into the following major components
    - We know for sure that what is useful to show the player will have to come iteratively as humans test the mod. So we expect this GUI to change frequently and no part of the code should rely on the exact behavior of the GUI.
    - The GUI might want to do more than just the main thesis of the mod. For example later we might want to show how many handcrafted items the player has produced in order to get the Lazy Bastard achievement. We don't want these extra items to pollute the main data component of the game tracking progress though. That is the core interface that helps separate code from becoming unwieldy.
 5. A few mod settings for how the player wants the mod to work, including a few quick actions (like advance to next split) that the player might want to bind to keys. This is all pretty standard stuff for a Factorio mod and I don't think will cause any code smell or pain to the architecture
-6. A plan editor GUI. This will be the main pain point of coding the app as the Factorio mod GUI widgets are limited in ability and constructing these widgets is difficult for AI coders. This is one of places in the mod where performance is not paramount and code cleanliness, readability, correctness and being able to be changed without breaking is more important.
+6. Plan authoring is **not** a custom GUI. A speedrun plan is a blueprint book whose label ends in `[LP]`. Each page is a split; extra items and research live in the page description between long-pole data markers. See `storage/DESIGN.MD`. Do not add `plan_editor/`.
 7. A storage engine designed to help data from the mod travel from one save where it is created under no time pressure, to a new save game where the player needs the data to load effortlessly as fast as possible.
    - It should sync to the player's Steam Cloud when the player saves and quits. As far as I know blueprints and blueprint books are the only real way to do this.
    - The storage engine should be able to list the available speedrun plans to the in-game speedrun GUI as well as suggest what the first plan is that could be auto-loaded.
 8. A moduler set of event listeners (maybe called snoopers) that monitor Factorio's API and keep the data component tracking items produced, consumed and destroyed in the data object up to date.
 9. A recipe resolver. In Space Age especially there are many recipes to create the same entity or item. When the mod needs to ask "how many seconds will it take to craft the remaining 200 gear wheels", it needs to handle the fact that multiple recipes exist. This will be in the hot loop inside of the game tick so it must be super performant.
    - The interfance for it should consider context when resolving recipes. At the very least that should include what surface (Nauvis, Vulcanus, space platform, etc) is being considered. It should also be free to return a blend of fractional recipes by weight. For example 20% basic oil processing 80% advanced oil processing.
-   - It should be possible for there to be a different implementation resolving recipes used by the plan editor as vs the in-game HUD GUI. Perhaps the in game GUI HUD figures out which recipes are active and uses them automatically in the correct ratios.
+   - The selection heuristic must stay a replaceable module (`PRODUCT.md` §4). The HUD implementation should be free to blend observed recipe ratios.
    - This might be another class that changes frequently with iteration, so making the API expressive enough to handle future fluctuations will allow us to get started without having all the answers.
 10. A client of the recipe resolver that will recursively backtrack over recipe ingredients to calculate raw costs of various items in the game (including crafting times).
 11. Mock data objects that prevent the need for launching factorio to test our mod, some utility functions and methods meant to construct the mock data objects from human readable and editable files.
@@ -74,3 +76,5 @@ The mod source code must be well organized into the following major components
 ## Non-goals
 
 - Doesn't need to support multiple forces or PvP
+- No custom plan-editor GUI
+- Do not bake a single oil/recycling/Kovarex recipe policy into requirement expansion
