@@ -65,17 +65,7 @@ function M.for_splits(current_split, next_split, state, split_start_placed_produ
     progress.pending = progress.pending + ready
     if shortfall > 0 then
       for _, blocker in ipairs(limiting_path.blockers(item_name, shortfall, context)) do
-        local existing = blockers_by_name[blocker.item_name]
-        if existing then
-          existing.count = existing.count + blocker.count
-          existing.eta_ticks = math.max(existing.eta_ticks, blocker.eta_ticks)
-        else
-          blockers_by_name[blocker.item_name] = {
-            item_name = blocker.item_name,
-            count = blocker.count,
-            eta_ticks = blocker.eta_ticks
-          }
-        end
+        unfinished_items.accumulate(blockers_by_name, blocker)
       end
     end
   end

@@ -5,6 +5,7 @@ local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
 local construction_progress = require("progress_analysis.construction_progress")
 local next_split_construction_progress = require("progress_analysis.next_split_construction_progress")
 local research_progress = require("progress_analysis.research_progress")
+local observed_crafts = require("progress_analysis.observed_crafts")
 local split_completion = require("progress_analysis.split_completion")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 local current_split_quickbar = require("runtime.current_split_quickbar")
@@ -72,10 +73,12 @@ local function view_for_attempt(attempt, state)
   local view = attempt:hud_view(game.tick)
   local split = attempt:current_split()
   if split then
+    local crafts = observed_crafts.snapshot()
     view.construction_progress = construction_progress.for_split(
       split,
       state,
-      attempt.split_start_placed_product_counts
+      attempt.split_start_placed_product_counts,
+      { observed_crafts = crafts }
     )
     view.research_progress = research_progress.for_split(split, state, game.forces.player)
 
@@ -86,7 +89,8 @@ local function view_for_attempt(attempt, state)
         split,
         production_split,
         state,
-        attempt.split_start_placed_product_counts
+        attempt.split_start_placed_product_counts,
+        { observed_crafts = crafts }
       )
     end
   end

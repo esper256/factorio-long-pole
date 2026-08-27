@@ -53,6 +53,16 @@ assert(gears_limited["iron-gear-wheel"] == 500)
 assert(gears_limited["transport-belt"] == nil)
 assert(gears_limited["iron-plate"] == nil)
 
+local gears_blockers = limiting_path.blockers(
+  "transport-belt",
+  1000,
+  context_with({ ["iron-plate"] = 10000 })
+)
+local gears_blocker = gears_blockers[1]
+assert(gears_blocker.item_name == "iron-gear-wheel")
+assert(gears_blocker.produced_per_minute == 0)
+assert(gears_blocker.eta_ticks ~= nil)
+
 local plates_limited = names(limiting_path.blockers(
   "transport-belt",
   1000,

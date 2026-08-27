@@ -79,7 +79,7 @@ hud.refresh(player, {
     pending = 3,
     tooltip = "Next production: 3 ready · 7 remaining",
     unfinished_items = {
-      { item_name = "iron-gear-wheel", count = 7, eta_ticks = 120 }
+      { item_name = "iron-gear-wheel", count = 7, eta_ticks = 720, produced_per_minute = 60 }
     }
   }
 })
@@ -90,6 +90,9 @@ assert(hud_element ~= nil)
 assert(hud_element.type == "flow")
 assert(hud_element.style.padding == 0)
 assert(hud_element.style.vertical_spacing == 0)
+assert(hud_element.style.horizontal_spacing == nil)
+assert(header.style.horizontal_spacing == 0)
+assert(header.style.vertical_spacing == nil)
 assert(hud_element.style.width == 192)
 assert(header.game_clock == nil)
 assert(hud_element.next_split_row == nil)
@@ -116,7 +119,7 @@ assert(hud_element.research_progress.tooltip == "Research: 5 consumed in labs ·
 assert(hud_element.research_shortfalls.entry_1.item_icon.sprite == "item/automation-science-pack")
 assert(hud_element.next_split_production_progress.tooltip == "Next production: 3 ready · 7 remaining")
 assert(hud_element.next_split_production_shortfalls.entry_1.item_icon.sprite == "item/iron-gear-wheel")
-assert(hud_element.next_split_production_shortfalls.entry_1.quantity.caption == "7")
+assert(hud_element.next_split_production_shortfalls.entry_1.quantity.caption == "12s")
 
 hud.refresh(player, {
   plan_label = "Any% practice [LP]",

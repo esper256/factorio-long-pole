@@ -52,11 +52,16 @@ local function game_time_caption(tick)
   return ("%d:%02d"):format(minutes, seconds)
 end
 
-local function apply_tight_flow_style(element)
+-- Factorio 2.1 VerticalFlow rejects horizontal_spacing; HorizontalFlow
+-- rejects vertical_spacing. Only set the spacing that matches direction.
+local function apply_tight_flow_style(element, direction)
   element.style.padding = 0
   element.style.margin = 0
-  element.style.vertical_spacing = 0
-  element.style.horizontal_spacing = 0
+  if direction == "horizontal" then
+    element.style.horizontal_spacing = 0
+  else
+    element.style.vertical_spacing = 0
+  end
 end
 
 local function build(player)
@@ -66,14 +71,14 @@ local function build(player)
     direction = "vertical"
   })
   hud.style.width = HUD_WIDTH
-  apply_tight_flow_style(hud)
+  apply_tight_flow_style(hud, "vertical")
 
   local header = hud.add({
     type = "flow",
     name = HEADER_NAME,
     direction = "horizontal"
   })
-  apply_tight_flow_style(header)
+  apply_tight_flow_style(header, "horizontal")
   header.style.vertical_align = "center"
   local plan_name = header.add({
     type = "label",

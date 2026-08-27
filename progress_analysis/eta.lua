@@ -18,6 +18,20 @@ function M.handcraft_per_minute(recipe_energy_seconds, crafting_speed)
   return 60 * speed / energy
 end
 
+function M.format_ticks(ticks)
+  local seconds = math.max(1, math.ceil((ticks or 0) / 60))
+  local hours = math.floor(seconds / 3600)
+  local minutes = math.floor((seconds % 3600) / 60)
+  local remainder = seconds % 60
+  if hours > 0 then
+    return ("%d:%02d:%02d"):format(hours, minutes, remainder)
+  end
+  if minutes > 0 then
+    return ("%d:%02d"):format(minutes, remainder)
+  end
+  return seconds .. "s"
+end
+
 function M.finish_ticks(remaining_count, produced_per_minute, handcraft_per_minute)
   local remaining = math.max(0, remaining_count or 0)
   if remaining <= 0 then

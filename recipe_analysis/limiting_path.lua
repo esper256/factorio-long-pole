@@ -34,12 +34,17 @@ local function merge_blocker(blockers_by_name, blocker)
     blockers_by_name[blocker.item_name] = {
       item_name = blocker.item_name,
       count = blocker.count,
-      eta_ticks = blocker.eta_ticks
+      eta_ticks = blocker.eta_ticks,
+      produced_per_minute = blocker.produced_per_minute or 0
     }
     return
   end
   existing.count = existing.count + blocker.count
   existing.eta_ticks = math.max(existing.eta_ticks, blocker.eta_ticks)
+  existing.produced_per_minute = math.max(
+    existing.produced_per_minute or 0,
+    blocker.produced_per_minute or 0
+  )
 end
 
 local function walk(item_name, remaining, context, depth, blockers_by_name)
@@ -54,7 +59,8 @@ local function walk(item_name, remaining, context, depth, blockers_by_name)
     merge_blocker(blockers_by_name, {
       item_name = item_name,
       count = remaining,
-      eta_ticks = finish_ticks_for(item_name, remaining, context)
+      eta_ticks = finish_ticks_for(item_name, remaining, context),
+      produced_per_minute = context.produced_per_minute(item_name)
     })
     return
   end
@@ -83,7 +89,8 @@ local function walk(item_name, remaining, context, depth, blockers_by_name)
     merge_blocker(blockers_by_name, {
       item_name = item_name,
       count = remaining,
-      eta_ticks = finish_ticks_for(item_name, remaining, context)
+      eta_ticks = finish_ticks_for(item_name, remaining, context),
+      produced_per_minute = context.produced_per_minute(item_name)
     })
   end
 end

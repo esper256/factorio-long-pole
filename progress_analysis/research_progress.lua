@@ -72,7 +72,8 @@ function M.for_split(split, state, force)
       progress.unfinished_items[#progress.unfinished_items + 1] = {
         item_name = pack_name,
         count = remaining,
-        eta_ticks = eta.finish_ticks(remaining, consume_rate, 0)
+        eta_ticks = eta.finish_ticks(remaining, consume_rate, 0),
+        produced_per_minute = consume_rate
       }
     end
   end

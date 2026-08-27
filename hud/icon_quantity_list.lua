@@ -1,6 +1,11 @@
 -- Compact horizontal item icon and quantity pairs for unfinished requirements.
 -- Updates existing children in place so the 1-second pulse does not rebuild
 -- the row when the set of icons did not change.
+--
+-- Caption is ETA when the factory is producing the item, otherwise remaining
+-- count. Sort order is the caller's responsibility (longest pole first).
+local eta = require("progress_analysis.eta")
+
 local M = {}
 
 local ICON_SIZE = 8
@@ -17,7 +22,6 @@ function M.add(parent, name, width)
   list.style.margin = 0
   list.style.padding = 0
   list.style.horizontal_spacing = 0
-  list.style.vertical_spacing = 0
   return list
 end
 
@@ -43,13 +47,28 @@ local function compact_count(count)
   return ("%dB"):format(math.floor(count / 1000000000))
 end
 
+local function caption_for(entry)
+  if (entry.produced_per_minute or 0) > 0 and entry.eta_ticks then
+    return eta.format_ticks(entry.eta_ticks)
+  end
+  return compact_count(entry.count)
+end
+
+local function tooltip_for(entry, caption)
+  local count = compact_count(entry.count)
+  if caption == count then
+    return entry.item_name .. ": " .. count
+  end
+  return entry.item_name .. ": " .. caption .. " · " .. count
+end
+
 local function add_item(list, index, entry)
-  local display_count = compact_count(entry.count)
+  local caption = caption_for(entry)
   local pair = list.add({
     type = "flow",
     name = "entry_" .. index,
     direction = "horizontal",
-    tooltip = entry.item_name .. ": " .. display_count
+    tooltip = tooltip_for(entry, caption)
   })
   pair.style.margin = 0
   pair.style.padding = 0
@@ -65,17 +84,17 @@ local function add_item(list, index, entry)
   local quantity = pair.add({
     type = "label",
     name = "quantity",
-    caption = tostring(display_count)
+    caption = caption
   })
   quantity.style.font = "default-small"
   quantity.style.padding = 0
 end
 
 local function update_item(pair, entry)
-  local display_count = compact_count(entry.count)
-  pair.tooltip = entry.item_name .. ": " .. display_count
+  local caption = caption_for(entry)
+  pair.tooltip = tooltip_for(entry, caption)
   pair.item_icon.sprite = "item/" .. entry.item_name
-  pair.quantity.caption = tostring(display_count)
+  pair.quantity.caption = caption
 end
 
 function M.refresh(list, entries)

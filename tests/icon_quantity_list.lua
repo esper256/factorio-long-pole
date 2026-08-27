@@ -59,6 +59,14 @@ assert(first_pair.quantity.caption == "12")
 assert(list.entry_2.quantity.caption == "40")
 
 icon_quantity_list.refresh(list, {
+  { item_name = "iron-gear-wheel", count = 7, eta_ticks = 720, produced_per_minute = 60 },
+  { item_name = "coal", count = 40, eta_ticks = 9999, produced_per_minute = 0 }
+})
+assert(list.entry_1.quantity.caption == "12s")
+assert(list.entry_1.tooltip == "iron-gear-wheel: 12s · 7")
+assert(list.entry_2.quantity.caption == "40")
+
+icon_quantity_list.refresh(list, {
   { item_name = "coal", count = 7 }
 })
 assert(list.entry_1 == first_pair)
