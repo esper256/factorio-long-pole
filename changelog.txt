@@ -10,6 +10,8 @@ Date: 2026-08-27
     - Advance and rewind are unbound from completion (Shift+Period / Shift+Comma).
     - Ledger harvest covers trees, rocks, wreck loot, robot mining, and script destroy.
     - Recipe selection is a replaceable module; next-split shortfalls walk to limiting ingredients.
+    - Ore patches are production statistics only; trees/rocks/wrecks stay harvested.
+    - Compact framed HUD with the run clock in the header and next-split production grouped under that split.
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.1
 Date: 2026-07-22
