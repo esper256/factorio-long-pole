@@ -14,6 +14,7 @@ Date: 2026-08-27
     - Compact left-side flow HUD (192px, 8px icons, no frame padding) so more of the map stays visible.
     - Shortfalls show blocking ingredients, ETA when a production rate exists, otherwise remaining count, sorted by longest pole.
     - Spend loose stock once across a split so extra ore, labs, and packs cannot each claim the same 15 copper.
+    - Integration test walks the exported 100% DS Speedrun [LP] plan through mocked Factorio events.
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.1
 Date: 2026-07-22
