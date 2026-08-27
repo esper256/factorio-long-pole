@@ -6,8 +6,8 @@
 local configured_snoopers = {
   {
     name = "player_mined_item",
-    -- Entity-specific mining and production statistics now own item accounting.
-    -- Retain this alternative until we deliberately cover tile mining.
+    -- Production statistics already include hand-mined and drill-mined ore.
+    -- Keep this off so those items are not counted twice (PRODUCT.md §14).
     enabled = false,
     module = require("snoopers.player_mined_item")
   },

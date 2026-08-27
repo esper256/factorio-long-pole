@@ -1,8 +1,7 @@
 -- Records items granted by Factorio's on_player_mined_item event.
 --
--- The companion player_mined_entity snooper records the entity removal itself.
--- This remains the sole source for returned items so one mining action does not
--- duplicate product accounting.
+-- Disabled: production statistics already include hand-mined and drill-mined
+-- ore (PRODUCT.md §14). Enabling this alongside the graph double-counts.
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 

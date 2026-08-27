@@ -1,6 +1,7 @@
 -- Reconciles item and fluid production from Factorio's per-force, per-surface
--- statistics. Trees/rocks/wreck loot are not in these graphs; harvested counts
--- stay on the ledger from entity-removal snoopers.
+-- statistics. This is the only source for ore from patches: both hand mining
+-- and mining drills (PRODUCT.md §14). Trees/rocks/wreck loot are not in these
+-- graphs; harvested counts stay on the ledger from entity-removal snoopers.
 --
 -- Quality is summed: vanilla play does not split the ledger by quality yet.
 -- Totals use the already-summed input_counts / output_counts so current-tick

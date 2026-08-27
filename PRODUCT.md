@@ -34,6 +34,8 @@ Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**
 
 **14. Loose stock.** Heuristic is acceptable. Loose stock is everything **produced, mined, harvested, or started with** that has not been **placed, consumed, spoiled, or destroyed**. Do not chase a perfect world inventory census.
 
+Ore from patches (hand-mined or by mining drills) is **only** whatever Factorio puts on the production graph. Do not snoop `on_player_mined_item` / resource-entity mining for those items — that double-counts against the graph. Trees, rocks, and wreck loot are not on that graph; those stay harvested from entity events.
+
 **17. Starting items.** Chest withdrawal is not production. Crash-site wreck loot (the player grabbing starter iron plates, etc.) must be **special-cased** so those items enter loose stock once. Detecting the actual starter set from the API is desirable if it is possible; a vanilla table is an acceptable v1 if detection is not.
 
 **18. Import.** Importing a plan **always replaces** the save’s active plan. No confirm, no merge.
@@ -60,4 +62,5 @@ Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**
 - Perfect loose-stock reconciliation scans.
 - A separate harvesting / extra-item HUD bar.
 - Treating Extra Stock as demand on the *current* print. Extras belong on the split that needs the items (typically the next one).
+- Snooping hand-mined ore patches. Production statistics already include hand mining and mining drills.
 - Baking a single oil/recycling/Kovarex recipe policy into requirement expansion.
