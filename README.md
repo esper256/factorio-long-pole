@@ -2,6 +2,8 @@
 
 A small Factorio Mod to assist speedrunners in creating plans and tracking how well they are progressing towards the next split in their plan.
 
+Product rules for implementers: [`PRODUCT.md`](PRODUCT.md) (overrides [`ARCHITECTURE.md`](ARCHITECTURE.md) on conflict).
+
 ## Tests
 
 Unit tests:

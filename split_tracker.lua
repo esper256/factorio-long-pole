@@ -607,6 +607,9 @@ local function icon_group(entries, options)
   }
 end
 
+-- HUD model: one previous split as yardstick, current remaining work, next-split
+-- readiness from the next split's own prints. Production/stock is the real
+-- signal; placement is bonus (PRODUCT.md §8, §11, §12).
 function M.get_split_status(state, force_name)
   clamp_current_index(state)
 
@@ -743,6 +746,9 @@ function M.get_split_status(state, force_name)
   return statuses
 end
 
+-- PRODUCT.md §6: the player may move forward or back at any time, including
+-- when this split is incomplete. There is not yet a rewind helper; do not add
+-- "ready" gating here while adding one.
 function M.advance_split(state, current_tick)
   clamp_current_index(state)
   local current_index = state.current_split_index

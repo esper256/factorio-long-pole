@@ -1,3 +1,6 @@
+-- Loose-stock ledger. Heuristic: produced/mined/harvested/started-with minus
+-- placed/consumed/spoiled/destroyed. Placement is bonus progress, not the
+-- source of truth (PRODUCT.md §11, §14).
 local M = {}
 
 local STORAGE_VERSION = 2

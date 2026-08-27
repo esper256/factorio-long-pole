@@ -1,5 +1,8 @@
 local progress_tracker_store = require("progress_tracker_store")
 
+-- Crash-site wreck loot is not production (chest withdrawal never is). Grant
+-- the vanilla starter set into loose stock once. Detecting the real starter
+-- inventory from the API is desirable if it becomes possible (PRODUCT.md §17).
 local M = {}
 
 local STARTING_ITEMS = {

@@ -1,3 +1,6 @@
+-- Prototype lookup only. Observed playthrough recipe-ratio blending and other
+-- selection policies must live behind a replaceable heuristic module, not here
+-- (PRODUCT.md §4).
 local config = require("build_requirements_config")
 
 local M = {}
