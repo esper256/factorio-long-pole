@@ -398,6 +398,14 @@ local function import_blueprint_link_description(lines, header)
   }
 end
 
+function M.fingerprint_from_entity_summary(entity_summary)
+  return fingerprint_from_entity_summary(entity_summary)
+end
+
+function M.fingerprints_match(left, right)
+  return (left or "") == (right or "")
+end
+
 function M.export_to_description(data)
   if type(data) ~= "table" then
     return nil, "description data must be a table"

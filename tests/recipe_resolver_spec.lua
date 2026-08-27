@@ -84,6 +84,24 @@ describe("recipe_resolver", function()
     assert.same(_G.prototypes.recipe["transport-belt"], matches[1])
   end)
 
+  it("accepts 2.1 recipe.categories without a legacy category field", function()
+    _G.prototypes = {
+      recipe = {
+        ["transport-belt"] = {
+          categories = {"crafting", "electronics-or-assembling"},
+          products = {
+            {type = "item", name = "transport-belt", amount = 2}
+          }
+        }
+      }
+    }
+
+    local matches = recipe_resolver.find_recipes_for_result("item", "transport-belt", "nauvis")
+
+    assert.are.equal(1, #matches)
+    assert.same(_G.prototypes.recipe["transport-belt"], matches[1])
+  end)
+
   it("calculates expected output amount for probabilistic products", function()
     local amount = recipe_resolver.product_amount_for_result({
       products = {

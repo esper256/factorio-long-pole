@@ -1,5 +1,6 @@
 local progress_tracker_store = require("progress_tracker_store")
 local build_requirements = require("build_requirements")
+local split_status = require("split_status")
 
 local M = {}
 
@@ -131,7 +132,6 @@ function M.init(state)
   state.current_split_index = state.current_split_index or 1
   state.current_split_started_tick = state.current_split_started_tick
   state.editor_selection = state.editor_selection or {}
-  state.entity_events = state.entity_events or {}
   state.split_requirement_cache = {
     by_split_id = {}
   }
@@ -567,15 +567,6 @@ function M.remove_split_by_id(state, split_id)
   return M.remove_split(state, split_index)
 end
 
-function M.on_entity_changed(state, event)
-  local entity = event.entity or event.created_entity
-  state.entity_events[#state.entity_events + 1] = {
-    tick = event.tick,
-    unit_number = entity and entity.unit_number or nil,
-    name = entity and entity.name or nil
-  }
-end
-
 function M.get_split_progress_snapshot(state, split_index, force_name)
   local split = state.splits[split_index]
   if not split then
@@ -594,161 +585,18 @@ function M.get_current_split_progress_snapshot(state, force_name)
   return M.get_split_progress_snapshot(state, state.current_split_index, force_name)
 end
 
-local function icon_group(entries, options)
-  if not entries or #entries == 0 then
-    return nil
-  end
-
-  return {
-    entries = entries,
-    tone = options and options.tone or "normal",
-    sort_mode = options and options.sort_mode or "progress",
-    kind = options and options.kind or "requirements"
-  }
-end
-
--- HUD model: one previous split as yardstick, current remaining work, next-split
--- readiness from the next split's own prints. Production/stock is the real
--- signal; placement is bonus (PRODUCT.md §8, §11, §12).
 function M.get_split_status(state, force_name)
   clamp_current_index(state)
-
-  local statuses = {
-    previous = nil,
-    current = nil,
-    upcoming = {}
-  }
-
-  local current_index = state.current_split_index
-  local current_split = state.splits[current_index]
-  local current_snapshot = nil
-  local current_missing = {}
-  local current_error_message = nil
-  local current_reserved_pools = nil
-  local current_stock_debt = {}
-  local current_placement_progress = {}
-  local current_research_progress = {}
-  local next_split_readiness = {}
-
-  if current_split then
-    current_snapshot = force_name and M.get_split_progress_snapshot(state, current_index, force_name) or nil
-    current_missing, current_error_message, current_reserved_pools = build_requirements.summarize_missing_requirements(
-      current_split,
-      current_snapshot,
-      {
-        root_requirements = cached_root_requirements(state, current_split, "all-requirements")
-      }
-    )
-    current_stock_debt = build_requirements.summarize_direct_requirement_progress(current_split, current_snapshot, {
-      root_requirements = cached_root_requirements(state, current_split, "stock-debt", {
-        include_technologies = false
-      }),
-      include_technologies = false
-    })
-    current_placement_progress = build_requirements.summarize_direct_requirement_progress(current_split, current_snapshot, {
-      root_requirements = cached_root_requirements(state, current_split, "placement-progress", {
-        include_items = false,
-        include_technologies = false,
-        blueprint_satisfaction_mode = "placed_only"
-      }),
-      include_items = false,
-      include_technologies = false,
-      blueprint_satisfaction_mode = "placed_only"
-    })
-    current_research_progress = build_requirements.summarize_missing_requirements(current_split, current_snapshot, {
-      root_requirements = cached_root_requirements(state, current_split, "research-progress", {
-        include_blueprints = false,
-        include_items = false
-      }),
-      include_blueprints = false,
-      include_items = false
-    })
-  end
-
-  local next_split = state.splits[current_index + 1]
-  if next_split then
-    local next_snapshot = nil
-    local next_initial_pools = nil
-
-    if force_name and current_split and next_split.surface == current_split.surface then
-      next_snapshot = current_snapshot
-      next_initial_pools = current_reserved_pools
-    elseif force_name then
-      next_snapshot = M.get_split_progress_snapshot(state, current_index + 1, force_name)
+  return split_status.build(state, force_name, {
+    get_split_progress_snapshot = M.get_split_progress_snapshot,
+    cached_root_requirements = function(status_state, split, cache_key, options)
+      return cached_root_requirements(status_state, split, cache_key, options)
     end
-
-    next_split_readiness = build_requirements.summarize_direct_requirement_progress(next_split, next_snapshot, {
-      root_requirements = cached_root_requirements(state, next_split, "next-readiness", {
-        include_technologies = false,
-        blueprint_satisfaction_mode = "loose_only"
-      }),
-      include_technologies = false,
-      blueprint_satisfaction_mode = "loose_only",
-      initial_pools = next_initial_pools
-    })
-  end
-
-  for index, split in ipairs(state.splits) do
-    local status = {
-      index = index,
-      name = split.name,
-      missing = index == current_index and current_missing or {},
-      missing_error = index == current_index and current_error_message or nil,
-      is_current = index == current_index,
-      is_ready_to_complete = index == current_index and current_error_message == nil and #current_missing == 0,
-      completed_elapsed_ticks = split.completed_elapsed_ticks,
-      icon_groups = {}
-    }
-
-    if index == current_index - 1 then
-      local group = icon_group(current_stock_debt, {
-        tone = "alert",
-        sort_mode = "progress",
-        kind = "carry-over-stock"
-      })
-      if group then
-        status.icon_groups[#status.icon_groups + 1] = group
-      end
-      statuses.previous = status
-    elseif index == current_index then
-      local placement_group = icon_group(current_placement_progress, {
-        tone = "normal",
-        sort_mode = "remaining",
-        kind = "placement-progress"
-      })
-      local research_group = icon_group(current_research_progress, {
-        tone = "normal",
-        sort_mode = "progress",
-        kind = "research-production"
-      })
-      if placement_group then
-        status.icon_groups[#status.icon_groups + 1] = placement_group
-      end
-      if research_group then
-        status.icon_groups[#status.icon_groups + 1] = research_group
-      end
-      statuses.current = status
-    elseif index == current_index + 1 then
-      local group = icon_group(next_split_readiness, {
-        tone = "normal",
-        sort_mode = "progress",
-        kind = "next-split-readiness"
-      })
-      if group then
-        status.icon_groups[#status.icon_groups + 1] = group
-      end
-      statuses.upcoming[#statuses.upcoming + 1] = status
-    elseif index > current_index then
-      statuses.upcoming[#statuses.upcoming + 1] = status
-    end
-  end
-
-  return statuses
+  })
 end
 
 -- PRODUCT.md §6: the player may move forward or back at any time, including
--- when this split is incomplete. There is not yet a rewind helper; do not add
--- "ready" gating here while adding one.
+-- when this split is incomplete. Do not gate navigation on predicted completion.
 function M.advance_split(state, current_tick)
   clamp_current_index(state)
   local current_index = state.current_split_index
@@ -768,6 +616,26 @@ function M.advance_split(state, current_tick)
 
   state.current_split_index = #state.splits + 1
   state.current_split_started_tick = nil
+  return true
+end
+
+function M.rewind_split(state, current_tick)
+  clamp_current_index(state)
+  if state.current_split_index <= 1 then
+    return false
+  end
+
+  local current_split = state.splits[state.current_split_index]
+  if current_split then
+    current_split.completed_elapsed_ticks = nil
+  end
+
+  state.current_split_index = state.current_split_index - 1
+  local previous_split = state.splits[state.current_split_index]
+  if previous_split then
+    previous_split.completed_elapsed_ticks = nil
+  end
+  state.current_split_started_tick = current_tick or 0
   return true
 end
 

@@ -1,38 +1,37 @@
-local blueprint_snapshot = require("blueprint_snapshot")
-local blueprint_library = require("blueprint_library")
 local build_requirements = require("build_requirements")
 local item_quantity_dialog = require("gui.item_quantity_dialog")
 local plan_storage = require("plan_storage")
 local slot_grid = require("gui.slot_grid")
 local tracker = require("split_tracker")
-local cursor_blueprint_source = require("util.cursor_blueprint_source")
+local blueprint_capture = require("util.blueprint_capture")
+local safe_index_util = require("util.safe_index")
+local element_util = require("gui.element_util")
+local layout = require("gui.plan_editor_layout")
+local surfaces = require("gui.plan_editor_surfaces")
 
 local M = {}
 
-local CONTROL_COLUMN_WIDTH = 220
-local BLUEPRINT_PANEL_WIDTH = 320
-local EXTRA_ITEMS_PANEL_WIDTH = 280
-local TOTAL_PANEL_MIN_WIDTH = 420
-local RESEARCH_COLUMN_WIDTH = 220
-local TITLE_FIELD_MIN_WIDTH = 320
-local TITLE_FIELD_MAX_WIDTH = 520
-local HEADER_TO_FIELDS_GAP = 10
-local COLUMN_SPACING = 6
-local BUILD_GRID_COLUMNS = 12
-local BUILD_GRID_SLOT_SIZE = 40
-local EXTRA_ITEM_GRID_COLUMNS = 4
-local EXTRA_ITEM_SLOT_SIZE = 40
-local RESEARCH_GRID_COLUMNS = 4
-local RESEARCH_SLOT_SIZE = 40
-local BLUEPRINT_CHIP_HEIGHT = 50
-local PANEL_HEADER_HEIGHT = 32
-local GRID_VERTICAL_SPACING = 4
-local GRID_CHROME_HEIGHT = 18
-local PLANET_BUTTON_SIZE = 30
-local COMPACT_ICON_BUTTON_SIZE = 28
-local RESEARCH_ADD_BUTTON_WIDTH = 28
-local BUILD_COLUMN_WIDTH = BLUEPRINT_PANEL_WIDTH + COLUMN_SPACING + EXTRA_ITEMS_PANEL_WIDTH
-local MIN_SPLIT_ROW_WIDTH = CONTROL_COLUMN_WIDTH + HEADER_TO_FIELDS_GAP + BUILD_COLUMN_WIDTH + COLUMN_SPACING + RESEARCH_COLUMN_WIDTH + COLUMN_SPACING + TOTAL_PANEL_MIN_WIDTH
+local CONTROL_COLUMN_WIDTH = layout.CONTROL_COLUMN_WIDTH
+local BLUEPRINT_PANEL_WIDTH = layout.BLUEPRINT_PANEL_WIDTH
+local EXTRA_ITEMS_PANEL_WIDTH = layout.EXTRA_ITEMS_PANEL_WIDTH
+local TOTAL_PANEL_MIN_WIDTH = layout.TOTAL_PANEL_MIN_WIDTH
+local RESEARCH_COLUMN_WIDTH = layout.RESEARCH_COLUMN_WIDTH
+local TITLE_FIELD_MIN_WIDTH = layout.TITLE_FIELD_MIN_WIDTH
+local TITLE_FIELD_MAX_WIDTH = layout.TITLE_FIELD_MAX_WIDTH
+local HEADER_TO_FIELDS_GAP = layout.HEADER_TO_FIELDS_GAP
+local COLUMN_SPACING = layout.COLUMN_SPACING
+local BUILD_GRID_COLUMNS = layout.BUILD_GRID_COLUMNS
+local BUILD_GRID_SLOT_SIZE = layout.BUILD_GRID_SLOT_SIZE
+local EXTRA_ITEM_GRID_COLUMNS = layout.EXTRA_ITEM_GRID_COLUMNS
+local EXTRA_ITEM_SLOT_SIZE = layout.EXTRA_ITEM_SLOT_SIZE
+local RESEARCH_GRID_COLUMNS = layout.RESEARCH_GRID_COLUMNS
+local RESEARCH_SLOT_SIZE = layout.RESEARCH_SLOT_SIZE
+local BLUEPRINT_CHIP_HEIGHT = layout.BLUEPRINT_CHIP_HEIGHT
+local PANEL_HEADER_HEIGHT = layout.PANEL_HEADER_HEIGHT
+local PLANET_BUTTON_SIZE = layout.PLANET_BUTTON_SIZE
+local COMPACT_ICON_BUTTON_SIZE = layout.COMPACT_ICON_BUTTON_SIZE
+local RESEARCH_ADD_BUTTON_WIDTH = layout.RESEARCH_ADD_BUTTON_WIDTH
+local MIN_SPLIT_ROW_WIDTH = layout.MIN_SPLIT_ROW_WIDTH
 
 M.root_name = "long_pole_plan_editor"
 M.close_button_name = "long_pole_close_plan_editor"
@@ -68,44 +67,14 @@ local SPLIT_ROW_DETAIL_ROW_NAME = "long_pole_split_detail_row"
 local SPLIT_ROW_FIELDS_NAME = "long_pole_split_fields"
 local SPLIT_ROW_NOTES_DRAWER_NAME = "long_pole_split_notes_drawer"
 
-local function safe_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
-end
-
-local function destroy_children(element)
-  for _, child in pairs(element.children) do
-    child.destroy()
-  end
-end
-
-local function count_grid_rows(entry_count, column_count)
-  if entry_count <= 0 then
-    return 1
-  end
-
-  return math.ceil(entry_count / column_count)
-end
+local destroy_children = element_util.destroy_children
 
 local function compute_grid_height(entry_count, column_count, slot_size)
-  local rows = count_grid_rows(entry_count, column_count)
-  return rows * slot_size + ((rows - 1) * GRID_VERTICAL_SPACING) + GRID_CHROME_HEIGHT
+  return layout.compute_grid_height(entry_count, column_count, slot_size)
 end
 
 local function compute_window_dimensions(player)
-  local width = math.floor((player.display_resolution.width / player.display_scale) * 0.94)
-  local height = math.floor((player.display_resolution.height / player.display_scale) * 0.86)
-  return math.max(1080, width), math.max(680, height)
+  return layout.compute_window_dimensions(player)
 end
 
 local function ensure_editor_state(state)
@@ -115,43 +84,23 @@ local function ensure_editor_state(state)
 end
 
 local function available_surfaces()
-  if rawget(_G, "script") and script.active_mods and script.active_mods["space-age"] then
-    return {"nauvis", "vulcanus", "fulgora", "gleba", "aquilo"}
-  end
-
-  return {"nauvis"}
+  return surfaces.available_surfaces()
 end
 
 local function normalize_split_surface(split)
-  local surfaces = available_surfaces()
-  for _, surface_name in ipairs(surfaces) do
-    if split.surface == surface_name then
-      return surface_name
-    end
-  end
-
-  return surfaces[1]
+  return surfaces.normalize_split_surface(split)
 end
 
 local function next_surface_name(current_surface)
-  local surfaces = available_surfaces()
-  local current_index = 1
-  for index, surface_name in ipairs(surfaces) do
-    if surface_name == current_surface then
-      current_index = index
-      break
-    end
-  end
-
-  return surfaces[(current_index % #surfaces) + 1]
+  return surfaces.next_surface_name(current_surface)
 end
 
 local function surface_sprite_path(surface_name)
-  return "space-location/" .. surface_name
+  return surfaces.surface_sprite_path(surface_name)
 end
 
 local function format_surface_caption(surface_name)
-  return (surface_name:gsub("^%l", string.upper))
+  return surfaces.format_surface_caption(surface_name)
 end
 
 local function raw_cost_error_entry(error_message)
@@ -162,18 +111,7 @@ local function raw_cost_error_entry(error_message)
 end
 
 local function try_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
+  return safe_index_util.get(root, key)
 end
 
 local function get_technology_prototypes()
@@ -212,37 +150,15 @@ local function clear_raw_cost_error(player, state, split)
 end
 
 local function style_compact_button(button, width, height)
-  button.style.width = width
-  button.style.height = height or width
-  button.style.left_padding = 0
-  button.style.right_padding = 0
-  button.style.top_padding = 0
-  button.style.bottom_padding = 0
+  layout.style_compact_button(button, width, height)
 end
 
 local function add_header_gap(parent, width)
-  local gap = parent.add({
-    type = "empty-widget"
-  })
-  gap.style.width = width
-  gap.style.height = 1
-  return gap
+  return layout.add_header_gap(parent, width)
 end
 
 local function add_header_label(parent, caption, width, stretch)
-  local label = parent.add({
-    type = "label",
-    caption = caption
-  })
-  label.style = "semibold_label"
-  if stretch then
-    label.style.horizontally_stretchable = true
-    label.style.minimal_width = width
-  else
-    label.style.minimal_width = width
-    label.style.maximal_width = width
-  end
-  return label
+  return layout.add_header_label(parent, caption, width, stretch)
 end
 
 local function effective_plan_name(name)
@@ -442,37 +358,7 @@ local function build_research_entries(split, technology_prototypes)
 end
 
 local function get_held_blueprint(player)
-  local resolved, error_message = cursor_blueprint_source.resolve_selected_blueprint(player)
-  if not resolved then
-    return nil, error_message
-  end
-
-  local source = resolved.source
-  local export_string = source.export_record and source.export_record() or source.export_stack()
-  local entities = source.get_blueprint_entities and source.get_blueprint_entities() or {}
-  local entity_count = source.get_blueprint_entity_count and source.get_blueprint_entity_count() or 0
-  local library_match = blueprint_library.find_blueprint_path_by_export(player, export_string, game)
-  local blueprint_name = safe_index(source, "label")
-
-  if not blueprint_name or blueprint_name == "" then
-    if resolved.carrier == "cursor_record" then
-      blueprint_name = blueprint_snapshot.resolve_name_from_export(export_string, "Unnamed Blueprint")
-    else
-      blueprint_name = "Unnamed Blueprint"
-    end
-  end
-
-  return {
-    name = blueprint_name,
-    export_string = export_string,
-    entity_count = entity_count,
-    entity_summary = blueprint_snapshot.summarize_entities(entities),
-    library_root = library_match and library_match.library_root or "player-blueprints",
-    inside_books = library_match and library_match.inside_books or nil,
-    blueprint_slot = library_match and library_match.blueprint_slot or resolved.source_book_active_index,
-    source_book_label = resolved.source_book_label,
-    source_book_active_index = resolved.source_book_active_index
-  }, nil
+  return blueprint_capture.capture_held_blueprint(player)
 end
 
 local function add_blueprint_sources(parent, split)

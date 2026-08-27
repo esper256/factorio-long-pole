@@ -20,7 +20,10 @@ local PROGRESS_SNOOPER_EVENT_IDS = {
   on_player_cancelled_crafting = defines.events.on_player_cancelled_crafting,
   on_player_mined_entity = defines.events.on_player_mined_entity,
   on_robot_built_entity = defines.events.on_robot_built_entity,
-  on_robot_mined_entity = defines.events.on_robot_mined_entity
+  on_robot_mined_entity = defines.events.on_robot_mined_entity,
+  on_entity_died = defines.events.on_entity_died,
+  script_raised_destroy = defines.events.script_raised_destroy,
+  on_object_destroyed = defines.events.on_object_destroyed
 }
 
 local AUTO_IMPORT_FIRST_PLAN_SETTING = "long-pole-auto-import-first-plan-on-new-game"
@@ -293,3 +296,13 @@ for _, event_name in ipairs(progress_snooper.subscribed_event_names()) do
     end)
   end
 end
+
+script.on_event("long-pole-advance-split", function(event)
+  tracker.advance_split(storage, event.tick)
+  refresh_split_viewer_for_player(game.get_player(event.player_index))
+end)
+
+script.on_event("long-pole-rewind-split", function(event)
+  tracker.rewind_split(storage, event.tick)
+  refresh_split_viewer_for_player(game.get_player(event.player_index))
+end)

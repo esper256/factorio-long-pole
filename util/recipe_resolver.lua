@@ -2,6 +2,7 @@
 -- selection policies must live behind a replaceable heuristic module, not here
 -- (PRODUCT.md §4).
 local config = require("build_requirements_config")
+local safe_index = require("util.safe_index")
 
 local M = {}
 
@@ -10,18 +11,7 @@ local RECIPE_RESULT_INDEX_CACHE = setmetatable({}, {__mode = "k"})
 local RECIPE_SURFACE_MATCH_CACHE = setmetatable({}, {__mode = "k"})
 
 local function try_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
+  return safe_index.get(root, key)
 end
 
 function M.get_recipe_prototypes()
@@ -85,17 +75,49 @@ function M.recipe_matches_surface_conditions(recipe, surface_name)
   return true
 end
 
-function M.recipe_category_allowed_on_surface(recipe, surface_name)
-  local allowed_categories = ALLOWED_RECIPE_CATEGORIES_BY_SURFACE[surface_name] or {}
+function M.recipe_categories(recipe)
+  -- 2.1: LuaRecipePrototype.categories. 2.0: category + additional_categories.
   local categories = {}
-  local primary_category = try_index(recipe, "category") or "crafting"
-  categories[#categories + 1] = primary_category
+  local seen = {}
 
-  -- Some 2.0/Space Age recipes expose alternate valid machine categories here,
-  -- so callers should accept any allowed category, not just the primary.
-  for _, category_name in ipairs(try_index(recipe, "additional_categories") or {}) do
+  local function add_category(category_name)
+    if type(category_name) ~= "string" or category_name == "" or seen[category_name] then
+      return
+    end
+    seen[category_name] = true
     categories[#categories + 1] = category_name
   end
+
+  local grouped = try_index(recipe, "categories")
+  if type(grouped) == "table" then
+    if grouped[1] ~= nil then
+      for _, category_name in ipairs(grouped) do
+        add_category(category_name)
+      end
+    else
+      for category_name, enabled in pairs(grouped) do
+        if enabled then
+          add_category(category_name)
+        end
+      end
+    end
+  end
+
+  add_category(try_index(recipe, "category"))
+  for _, category_name in ipairs(try_index(recipe, "additional_categories") or {}) do
+    add_category(category_name)
+  end
+
+  if #categories == 0 then
+    add_category("crafting")
+  end
+
+  return categories
+end
+
+function M.recipe_category_allowed_on_surface(recipe, surface_name)
+  local allowed_categories = ALLOWED_RECIPE_CATEGORIES_BY_SURFACE[surface_name] or {}
+  local categories = M.recipe_categories(recipe)
 
   for _, category_name in ipairs(categories) do
     if allowed_categories[category_name] == true then

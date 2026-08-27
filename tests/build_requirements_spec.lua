@@ -1213,4 +1213,48 @@ describe("build_requirements", function()
     assert.are.equal(4, summary[1].required_count)
     assert.are.equal(1, summary[1].fulfilled_count)
   end)
+
+  it("treats lab research progress as pack consumption, not loose packs", function()
+    local summary = build_requirements.summarize_missing_requirements({
+      surface = "nauvis",
+      technologies = {
+        {name = "automation"}
+      }
+    }, {
+      entries = {
+        {
+          item_name = "automation-science-pack",
+          loose_stock = 10,
+          current_split_claim = 0
+        }
+      },
+      research = {
+        by_name = {
+          automation = {
+            progress = 0.5,
+            researched = false
+          }
+        }
+      }
+    }, {
+      technology_prototypes = {
+        automation = {
+          research_unit_count = 10,
+          research_unit_ingredients = {
+            {name = "automation-science-pack", amount = 1}
+          }
+        }
+      },
+      resolve_recipe_set = function()
+        return {}
+      end
+    })
+
+    assert.are.equal(1, #summary)
+    assert.are.equal("automation-science-pack", summary[1].name)
+    assert.are.equal(5, summary[1].count)
+    assert.are.equal(10, summary[1].required_count)
+    assert.are.equal(5, summary[1].fulfilled_count)
+    assert.is_truthy(summary[1].eta_seconds)
+  end)
 end)

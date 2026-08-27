@@ -14,14 +14,19 @@ describe("progress_snooper", function()
     assert.is_true(snooper_state.enabled_snoopers["hand-crafting"])
     assert.is_true(snooper_state.enabled_snoopers["player-mined-entity"])
     assert.is_true(snooper_state.enabled_snoopers["production-statistics"])
+    assert.is_true(snooper_state.enabled_snoopers["entity-lifetime"])
+    assert.is_true(snooper_state.enabled_snoopers["research-progress"])
     assert.are.same({
       "on_built_entity",
+      "on_entity_died",
+      "on_object_destroyed",
       "on_player_cancelled_crafting",
       "on_player_crafted_item",
       "on_player_mined_entity",
       "on_pre_player_crafted_item",
       "on_robot_built_entity",
-      "on_robot_mined_entity"
+      "on_robot_mined_entity",
+      "script_raised_destroy"
     }, progress_snooper.subscribed_event_names())
   end)
 
@@ -71,7 +76,9 @@ describe("progress_snooper", function()
       placed_count = 1,
       current_split_claim = 1,
       produced_total = 0,
-      consumed_total = 0
+      consumed_total = 0,
+      produced_rate = 0,
+      consumed_rate = 0
     }, snapshot.entries[1])
   end)
 
@@ -315,7 +322,9 @@ describe("progress_snooper", function()
       placed_count = 0,
       current_split_claim = 0,
       produced_total = 6,
-      consumed_total = 0
+      consumed_total = 0,
+      produced_rate = 0,
+      consumed_rate = 0
     }, snapshot.entries[1])
     assert.are.same({
       item_name = "iron-plate",
@@ -323,7 +332,9 @@ describe("progress_snooper", function()
       placed_count = 0,
       current_split_claim = 0,
       produced_total = 0,
-      consumed_total = 4
+      consumed_total = 4,
+      produced_rate = 0,
+      consumed_rate = 0
     }, snapshot.entries[2])
 
     _G.game = previous_game
@@ -676,5 +687,52 @@ describe("progress_snooper", function()
     assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "stone-furnace"))
 
     _G.game = previous_game
+  end)
+
+  it("un-places destroyed entities and honors enabled_snoopers", function()
+    local state = {
+      splits = {
+        {
+          id = 81,
+          surface = "nauvis"
+        }
+      },
+      current_split_index = 1
+    }
+    progress_tracker_store.init(state)
+    progress_snooper.init(state)
+    progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 8801,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "stone-furnace",
+      split_id = 81
+    })
+
+    assert.is_true(progress_snooper.dispatch(state, "on_entity_died", {
+      tick = 500,
+      entity = {
+        valid = true,
+        unit_number = 8801,
+        name = "stone-furnace",
+        type = "furnace",
+        force = {name = "player"},
+        surface = {name = "nauvis"}
+      }
+    }))
+    assert.are.equal(0, progress_tracker_store.get_placed_count(state, "player", "nauvis", "stone-furnace"))
+
+    progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 8802,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "stone-furnace",
+      split_id = 81
+    })
+    state.progress_snooper.enabled_snoopers["entity-lifetime"] = false
+    assert.is_false(progress_snooper.dispatch(state, "on_object_destroyed", {
+      useful_id = 8802
+    }))
+    assert.are.equal(1, progress_tracker_store.get_placed_count(state, "player", "nauvis", "stone-furnace"))
   end)
 end)

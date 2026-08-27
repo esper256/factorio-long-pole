@@ -29,7 +29,14 @@ function M.on_built_entity(state, event)
     return false
   end
 
-  local consumed_loose_stock = stock_adjuster.adjust_from_inventory(state, force_name, surface_name, event and event.consumed_items or nil, -1)
+  local consumed_loose_stock = stock_adjuster.adjust_from_inventory(
+    state,
+    force_name,
+    surface_name,
+    event and event.consumed_items or nil,
+    -1,
+    {tick = event and event.tick or nil}
+  )
   local tracked_placed_entity = progress_tracker_store.upsert_placed_entity(state, {
     unit_number = entity.unit_number,
     force_name = force_name,
@@ -39,6 +46,10 @@ function M.on_built_entity(state, event)
     split_id = current_split_id(state),
     placed_tick = event.tick
   })
+
+  if entity and rawget(_G, "script") and script.register_on_object_destroyed then
+    pcall(script.register_on_object_destroyed, entity)
+  end
 
   return consumed_loose_stock or tracked_placed_entity
 end
@@ -56,7 +67,14 @@ function M.on_robot_built_entity(state, event)
     return false
   end
 
-  local consumed_loose_stock = stock_adjuster.adjust_from_item_stack(state, force_name, surface_name, event and event.stack or nil, -1)
+  local consumed_loose_stock = stock_adjuster.adjust_from_item_stack(
+    state,
+    force_name,
+    surface_name,
+    event and event.stack or nil,
+    -1,
+    {tick = event and event.tick or nil}
+  )
   local tracked_placed_entity = progress_tracker_store.upsert_placed_entity(state, {
     unit_number = entity.unit_number,
     force_name = force_name,
@@ -66,6 +84,10 @@ function M.on_robot_built_entity(state, event)
     split_id = current_split_id(state),
     placed_tick = event.tick
   })
+
+  if entity and rawget(_G, "script") and script.register_on_object_destroyed then
+    pcall(script.register_on_object_destroyed, entity)
+  end
 
   return consumed_loose_stock or tracked_placed_entity
 end

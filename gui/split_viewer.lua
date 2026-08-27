@@ -3,6 +3,8 @@ local item_progress_icon = require("gui.item_progress_icon")
 local plan_editor = require("gui.plan_editor")
 local progress_debug_popup = require("gui.progress_debug_popup")
 local tracker = require("split_tracker")
+local element_util = require("gui.element_util")
+local eta = require("util.eta")
 
 local M = {}
 
@@ -21,6 +23,7 @@ local ALERT_PROGRESS_COLOR = {r = 0.85, g = 0.25, b = 0.25}
 local function ensure_registry(state)
   state.split_viewer = state.split_viewer or {}
   state.split_viewer.debug_popup_visible_by_player = state.split_viewer.debug_popup_visible_by_player or {}
+  state.split_viewer.view_by_player = state.split_viewer.view_by_player or {}
   return state.split_viewer
 end
 
@@ -46,14 +49,7 @@ local function format_elapsed_ticks(elapsed_ticks)
   return ("%02d:%02d"):format(minutes, seconds)
 end
 
-local function destroy_children(element)
-  for index = #element.children, 1, -1 do
-    local child = element.children[index]
-    if child then
-      child.destroy()
-    end
-  end
-end
+local destroy_children = element_util.destroy_children
 
 local function icon_limit()
   local settings_root = settings and settings.global
@@ -69,6 +65,14 @@ local function sort_icon_entries(entries, sort_mode)
   end
 
   table.sort(sorted, function(a, b)
+    if sort_mode == "eta" then
+      local eta_a = a.eta_seconds or math.huge
+      local eta_b = b.eta_seconds or math.huge
+      if eta_a ~= eta_b then
+        return eta_a > eta_b
+      end
+    end
+
     if sort_mode == "remaining" then
       local count_a = a.count or 0
       local count_b = b.count or 0
@@ -100,14 +104,17 @@ local function sort_icon_entries(entries, sort_mode)
 end
 
 local function group_tooltip_title(group_kind)
-  if group_kind == "carry-over-stock" then
-    return "Carry-over stock still missing"
+  if group_kind == "previous-leftover" or group_kind == "carry-over-stock" then
+    return "Leftover work from the previous split"
+  end
+  if group_kind == "remaining-work" then
+    return "Long pole remaining work"
   end
   if group_kind == "placement-progress" then
     return "Still to place for this split"
   end
   if group_kind == "research-production" then
-    return "Still to produce for this split's research"
+    return "Still to consume in labs for this split's research"
   end
   if group_kind == "next-split-readiness" then
     return "Still missing before the next split is stock-ready"
@@ -129,6 +136,12 @@ local function build_icon_tooltip(entry, group_kind)
     tooltip[#tooltip + 1] = tostring(entry.fulfilled_count)
     tooltip[#tooltip + 1] = "/"
     tooltip[#tooltip + 1] = tostring(entry.required_count)
+  end
+
+  local eta_label = eta.format_seconds(entry.eta_seconds)
+  if eta_label then
+    tooltip[#tooltip + 1] = "\nETA: "
+    tooltip[#tooltip + 1] = eta_label
   end
 
   return tooltip
@@ -207,7 +220,7 @@ end
 
 local function add_split_row(parent, status)
   if not status then
-    return
+    return nil
   end
 
   local row = parent.add({
@@ -226,8 +239,9 @@ local function add_split_row(parent, status)
     name_label.style = "bold_label"
   end
 
+  local stopwatch_button = nil
   if status.is_current then
-    local stopwatch_button = row.add({
+    stopwatch_button = row.add({
       type = "button",
       name = M.advance_split_button_name,
       caption = format_elapsed_ticks(status.elapsed_ticks or 0)
@@ -263,6 +277,43 @@ local function add_split_row(parent, status)
   requirements_flow.style.horizontally_stretchable = true
   requirements_flow.style.horizontal_spacing = 4
   add_icon_groups(requirements_flow, status.icon_groups)
+  return stopwatch_button
+end
+
+local function status_signature(status, debug_visible)
+  local parts = {
+    debug_visible and "debug" or "plain",
+    status.previous and status.previous.name or "",
+    status.previous and tostring(status.previous.completed_elapsed_ticks or "") or "",
+    status.current and status.current.name or "",
+    status.current and tostring(status.current.is_ready_to_complete) or "",
+    tostring(#(status.upcoming or {}))
+  }
+
+  local function append_groups(split_status)
+    for _, group in ipairs(split_status and split_status.icon_groups or {}) do
+      parts[#parts + 1] = group.kind or ""
+      for _, entry in ipairs(group.entries or {}) do
+        parts[#parts + 1] = table.concat({
+          entry.kind or "",
+          entry.name or "",
+          tostring(entry.count or 0),
+          tostring(entry.fulfilled_count or 0),
+          tostring(entry.required_count or 0),
+          tostring(entry.eta_seconds or "")
+        }, ":")
+      end
+    end
+  end
+
+  append_groups(status.previous)
+  append_groups(status.current)
+  for _, upcoming in ipairs(status.upcoming or {}) do
+    parts[#parts + 1] = upcoming.name or ""
+    append_groups(upcoming)
+  end
+
+  return table.concat(parts, "|")
 end
 
 function M.refresh(player, state)
@@ -274,6 +325,28 @@ function M.refresh(player, state)
       direction = "vertical"
     })
     frame.style.horizontally_stretchable = true
+  end
+
+  local current_tick = game and game.tick or 0
+  tracker.ensure_current_split_started(state, current_tick)
+  local force_name = player.force and player.force.name or "player"
+  local status = tracker.get_split_status(state, force_name)
+  if status.current then
+    status.current.elapsed_ticks = tracker.current_split_elapsed_ticks(state, current_tick)
+  end
+
+  local debug_visible = is_debug_popup_visible(state, player.index)
+  local signature = status_signature(status, debug_visible)
+  local registry = ensure_registry(state)
+  local view = registry.view_by_player[player.index]
+  if view
+    and view.signature == signature
+    and view.stopwatch
+    and view.stopwatch.valid
+    and frame.valid
+    and not debug_visible then
+    view.stopwatch.caption = format_elapsed_ticks(status.current and status.current.elapsed_ticks or 0)
+    return
   end
 
   destroy_children(frame)
@@ -303,7 +376,7 @@ function M.refresh(player, state)
   local title = header.add({
     type = "button",
     name = M.title_toggle_button_name,
-    caption = is_debug_popup_visible(state, player.index) and "Splits -" or "Splits +"
+    caption = debug_visible and "Splits -" or "Splits +"
   })
   title.style.left_padding = 0
   title.style.right_padding = 0
@@ -319,23 +392,20 @@ function M.refresh(player, state)
   })
   body.style.top_margin = 6
 
-  local current_tick = game and game.tick or 0
-  tracker.ensure_current_split_started(state, current_tick)
-  local force_name = player.force and player.force.name or "player"
-  local status = tracker.get_split_status(state, force_name)
-  if status.current then
-    status.current.elapsed_ticks = tracker.current_split_elapsed_ticks(state, current_tick)
-  end
-
-  if is_debug_popup_visible(state, player.index) then
+  if debug_visible then
     progress_debug_popup.add(frame, tracker.get_current_split_progress_snapshot(state, force_name))
   end
 
   add_split_row(body, status.previous)
-  add_split_row(body, status.current)
+  local stopwatch = add_split_row(body, status.current)
   for _, split_status in ipairs(status.upcoming) do
     add_split_row(body, split_status)
   end
+
+  registry.view_by_player[player.index] = {
+    signature = signature,
+    stopwatch = stopwatch
+  }
 end
 
 function M.handle_click(player, state, element, event)

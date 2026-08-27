@@ -117,6 +117,7 @@ describe("plan_editor", function()
     original_modules["plan_storage"] = package.loaded["plan_storage"]
     original_modules["gui.slot_grid"] = package.loaded["gui.slot_grid"]
     original_modules["util.cursor_blueprint_source"] = package.loaded["util.cursor_blueprint_source"]
+    original_modules["util.blueprint_capture"] = package.loaded["util.blueprint_capture"]
     original_modules["gui.plan_editor"] = package.loaded["gui.plan_editor"]
 
     package.loaded["blueprint_snapshot"] = {
@@ -182,6 +183,7 @@ describe("plan_editor", function()
       end
     }
 
+    package.loaded["util.blueprint_capture"] = nil
     package.loaded["gui.plan_editor"] = nil
     plan_editor = require("gui.plan_editor")
     split_tracker = require("split_tracker")
@@ -343,6 +345,7 @@ describe("plan_editor", function()
     assert.are.equal(1, #state.splits[1].blueprints)
     assert.are.equal("Unnamed Blueprint", state.splits[1].blueprints[1].name)
     assert.are.equal("record-blueprint-export", state.splits[1].blueprints[1].export_string)
+    assert.are.equal("transport-belt:1", state.splits[1].blueprints[1].fingerprint)
     assert.are.equal("Openers", state.splits[1].blueprints[1].source_book_label)
     assert.are.equal(2, state.splits[1].blueprints[1].source_book_active_index)
   end)

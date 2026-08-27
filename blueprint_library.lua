@@ -1,18 +1,11 @@
+local blueprint_snapshot = require("blueprint_snapshot")
+local description_codec = require("util.description_codec")
+local safe_index_util = require("util.safe_index")
+
 local M = {}
 
 local function safe_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
+  return safe_index_util.get(root, key)
 end
 
 local function append_path(path, value)
@@ -38,6 +31,40 @@ local function collect_ordered_records(records)
   end)
 
   return ordered
+end
+
+local function record_fingerprint(record)
+  local entities = nil
+  if record.get_blueprint_entities then
+    local ok, result = pcall(record.get_blueprint_entities, record)
+    if ok then
+      entities = result
+    end
+  end
+  if type(entities) ~= "table" then
+    return nil
+  end
+
+  return description_codec.fingerprint_from_entity_summary(blueprint_snapshot.summarize_entities(entities))
+end
+
+local function books_match(current_books, wanted_books)
+  if not wanted_books or #wanted_books == 0 then
+    return true
+  end
+
+  current_books = current_books or {}
+  if #current_books ~= #wanted_books then
+    return false
+  end
+
+  for index, name in ipairs(wanted_books) do
+    if current_books[index] ~= name then
+      return false
+    end
+  end
+
+  return true
 end
 
 local function record_label(record)
@@ -178,6 +205,48 @@ end
 
 function M.find_first_player_blueprint_book_matching(player, predicate)
   return M.find_first_blueprint_book_matching(player, nil, predicate)
+end
+
+function M.find_blueprint_by_link(player, link)
+  if not (player and link) then
+    return nil
+  end
+
+  local wanted_name = link.blueprint_name or link.name
+  local wanted_books = link.inside_books
+  if (not wanted_books or #wanted_books == 0) and link.source_book_label and link.source_book_label ~= "" then
+    wanted_books = {link.source_book_label}
+  end
+  local wanted_slot = link.blueprint_slot or link.source_book_active_index
+  local wanted_fingerprint = link.fingerprint
+
+  return find_first_record_matching(player.blueprints, function(record, index, context)
+    if safe_index(record, "type") ~= "blueprint" then
+      return false
+    end
+    if not books_match(context.inside_books, wanted_books) then
+      return false
+    end
+
+    local label = record_label(record)
+    local name_matches = wanted_name == nil or wanted_name == "" or label == wanted_name
+    local slot_matches = wanted_slot == nil or index == wanted_slot
+    if not name_matches and not slot_matches then
+      return false
+    end
+
+    if wanted_fingerprint and wanted_fingerprint ~= "" then
+      local fingerprint = record_fingerprint(record)
+      if fingerprint and not description_codec.fingerprints_match(fingerprint, wanted_fingerprint) then
+        return false
+      end
+    end
+
+    return true
+  end, {
+    library_root = "player-blueprints",
+    inside_books = {}
+  })
 end
 
 return M

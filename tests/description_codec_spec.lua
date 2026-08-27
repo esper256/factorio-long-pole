@@ -171,4 +171,14 @@ fingerprint=transport-belt:12;inserter:4
       entity_count = 16
     }, decoded)
   end)
+
+  it("builds and compares blueprint fingerprints", function()
+    local fingerprint = codec.fingerprint_from_entity_summary({
+      {name = "burner-mining-drill", count = 2},
+      {name = "stone-furnace", count = 2}
+    })
+    assert.are.equal("burner-mining-drill:2;stone-furnace:2", fingerprint)
+    assert.is_true(codec.fingerprints_match(fingerprint, fingerprint))
+    assert.is_false(codec.fingerprints_match(fingerprint, "stone-furnace:2"))
+  end)
 end)

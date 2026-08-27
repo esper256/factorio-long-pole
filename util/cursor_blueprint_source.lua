@@ -1,18 +1,8 @@
 local M = {}
+local safe_index_util = require("util.safe_index")
 
 local function safe_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
+  return safe_index_util.get(root, key)
 end
 
 local function item_main_inventory_id()

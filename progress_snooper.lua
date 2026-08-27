@@ -2,6 +2,8 @@ local hand_crafting_snooper = require("progress_snoopers.hand_crafting_snooper")
 local player_mined_entity_snooper = require("progress_snoopers.player_mined_entity_snooper")
 local player_built_entity_snooper = require("progress_snoopers.player_built_entity_snooper")
 local production_statistics_snooper = require("progress_snoopers.production_statistics_snooper")
+local entity_lifetime_snooper = require("progress_snoopers.entity_lifetime_snooper")
+local research_snooper = require("progress_snoopers.research_snooper")
 
 local M = {}
 
@@ -9,7 +11,9 @@ local SNOOPERS = {
   hand_crafting_snooper,
   player_mined_entity_snooper,
   player_built_entity_snooper,
-  production_statistics_snooper
+  production_statistics_snooper,
+  entity_lifetime_snooper,
+  research_snooper
 }
 
 local function ensure_registry(state)
@@ -19,7 +23,7 @@ local function ensure_registry(state)
   return state.progress_snooper
 end
 
-local function register_handler(registry, event_name, handler)
+local function register_handler(registry, event_name, snooper_id, handler)
   if not (event_name and handler) then
     return
   end
@@ -30,7 +34,10 @@ local function register_handler(registry, event_name, handler)
     registry.handlers_by_event_name[event_name] = handlers
   end
 
-  handlers[#handlers + 1] = handler
+  handlers[#handlers + 1] = {
+    snooper_id = snooper_id,
+    handler = handler
+  }
 end
 
 local function resolve_subscription_handler(snooper, subscription)
@@ -52,7 +59,7 @@ end
 local function register_snooper_subscriptions(registry, snooper)
   for event_name, subscription in pairs(snooper.subscriptions or {}) do
     local handler = resolve_subscription_handler(snooper, subscription)
-    register_handler(registry, event_name, handler)
+    register_handler(registry, event_name, snooper.id, handler)
   end
 end
 
@@ -79,7 +86,9 @@ function M.init(state)
 
   for _, snooper in ipairs(SNOOPERS) do
     if snooper.id then
-      registry.enabled_snoopers[snooper.id] = true
+      if registry.enabled_snoopers[snooper.id] == nil then
+        registry.enabled_snoopers[snooper.id] = true
+      end
     end
     if snooper.init then
       snooper.init(state)
@@ -95,8 +104,9 @@ function M.dispatch(state, event_name, event)
   local handlers = registry.handlers_by_event_name[event_name] or {}
   local handled = false
 
-  for _, handler in ipairs(handlers) do
-    if handler(state, event) then
+  for _, registered in ipairs(handlers) do
+    local enabled = registered.snooper_id == nil or registry.enabled_snoopers[registered.snooper_id] ~= false
+    if enabled and registered.handler(state, event) then
       handled = true
     end
   end
@@ -113,7 +123,7 @@ function M.poll(state, runtime)
   local handled = false
 
   for _, snooper in ipairs(SNOOPERS) do
-    if registry.enabled_snoopers[snooper.id] and snooper.poll then
+    if registry.enabled_snoopers[snooper.id] ~= false and snooper.poll then
       handled = snooper.poll(state, runtime) or handled
     end
   end

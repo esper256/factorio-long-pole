@@ -3,24 +3,15 @@ local blueprint_library = require("blueprint_library")
 local description_codec = require("util.description_codec")
 local cursor_blueprint_source = require("util.cursor_blueprint_source")
 local tracker = require("split_tracker")
+local progress_tracker_store = require("progress_tracker_store")
+local safe_index_util = require("util.safe_index")
 
 local M = {}
 
 local DEFAULT_PLAN_NAME = "Untitled Plan"
 
 local function safe_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
+  return safe_index_util.get(root, key)
 end
 
 local function item_main_inventory_id()
@@ -159,8 +150,34 @@ local function resolve_import_source(player)
   return match and match.source or nil
 end
 
-local function apply_active_plan(state, plan, source)
+local function relink_blueprint_export_strings(player, state)
+  if not player then
+    return
+  end
+
+  for _, split in ipairs(state.splits or {}) do
+    for _, blueprint in ipairs(split.blueprints or {}) do
+      if (not blueprint.fingerprint or blueprint.fingerprint == "") and blueprint.entity_summary then
+        blueprint.fingerprint = description_codec.fingerprint_from_entity_summary(blueprint.entity_summary)
+      end
+      if not blueprint.export_string or blueprint.export_string == "" then
+        local match = blueprint_library.find_blueprint_by_link(player, blueprint)
+        local record = match and match.record
+        local export_fn = record and (record.export_record or record.export_stack)
+        if type(export_fn) == "function" then
+          local ok, export_string = pcall(export_fn, record)
+          if ok and type(export_string) == "string" and export_string ~= "" then
+            blueprint.export_string = export_string
+          end
+        end
+      end
+    end
+  end
+end
+
+local function apply_active_plan(state, plan, source, player)
   blueprint_snapshot.refresh_plan_blueprints(plan)
+  progress_tracker_store.reset(state)
   state.splits = plan.splits or {}
   state.plan_source = source
   state.plan_id = plan.plan_id or state.plan_id
@@ -169,6 +186,7 @@ local function apply_active_plan(state, plan, source)
   state.editor_selection = {}
 
   tracker.init(state)
+  relink_blueprint_export_strings(player, state)
 
   if not state.plan_id then
     state.plan_id = "plan-" .. state.next_split_id
@@ -209,7 +227,7 @@ local function extract_blueprint_snapshot(record, blueprint)
   blueprint.export_string = record.export_stack and record.export_stack() or blueprint.export_string
   blueprint.entity_count = record.get_blueprint_entity_count()
   blueprint.entity_summary = blueprint_snapshot.summarize_entities(record.get_blueprint_entities() or {})
-  blueprint.fingerprint = blueprint.fingerprint or nil
+  blueprint.fingerprint = description_codec.fingerprint_from_entity_summary(blueprint.entity_summary)
   return blueprint
 end
 
@@ -394,7 +412,7 @@ function M.decode_plan_from_item_stack(item_stack)
   return decode_plan_from_book_item(item_stack)
 end
 
-function M.import_plan_from_source(source, state)
+function M.import_plan_from_source(source, state, player)
   if not source then
     return false, "Hold a Long Pole blueprint book in the cursor to import it."
   end
@@ -405,13 +423,13 @@ function M.import_plan_from_source(source, state)
   end
 
   -- PRODUCT.md §18: import always replaces the save's active plan.
-  apply_active_plan(state, plan, "imported")
+  apply_active_plan(state, plan, "imported", player)
   return true, nil
 end
 
 function M.import_plan_from_cursor(player, state)
   local source = M.importable_plan_from_player(player)
-  return M.import_plan_from_source(source, state)
+  return M.import_plan_from_source(source, state, player)
 end
 
 function M.import_first_plan_from_blueprint_library(player, state)
@@ -423,7 +441,7 @@ function M.import_first_plan_from_blueprint_library(player, state)
     return false, "No Long Pole plan book was found in the player blueprint library."
   end
 
-  return M.import_plan_from_source(match.record, state)
+  return M.import_plan_from_source(match.record, state, player)
 end
 
 function M.can_export_to_cursor(cursor_stack, state)

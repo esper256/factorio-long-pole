@@ -2,15 +2,15 @@ local progress_tracker_store = require("progress_tracker_store")
 
 local M = {}
 
-function M.adjust_item_stack(state, force_name, surface_name, item_name, count_delta)
+function M.adjust_item_stack(state, force_name, surface_name, item_name, count_delta, options)
   if not (force_name and surface_name and item_name and count_delta and count_delta ~= 0) then
     return false
   end
 
-  return progress_tracker_store.adjust_loose_stock(state, force_name, surface_name, item_name, count_delta)
+  return progress_tracker_store.adjust_loose_stock(state, force_name, surface_name, item_name, count_delta, options)
 end
 
-function M.adjust_from_item_stack(state, force_name, surface_name, item_stack, multiplier)
+function M.adjust_from_item_stack(state, force_name, surface_name, item_stack, multiplier, options)
   if not item_stack then
     return false
   end
@@ -22,10 +22,10 @@ function M.adjust_from_item_stack(state, force_name, surface_name, item_stack, m
     return false
   end
 
-  return M.adjust_item_stack(state, force_name, surface_name, item_name, count * scale)
+  return M.adjust_item_stack(state, force_name, surface_name, item_name, count * scale, options)
 end
 
-function M.adjust_from_inventory(state, force_name, surface_name, inventory, multiplier)
+function M.adjust_from_inventory(state, force_name, surface_name, inventory, multiplier, options)
   if not inventory then
     return false
   end
@@ -35,7 +35,7 @@ function M.adjust_from_inventory(state, force_name, surface_name, inventory, mul
   for index = 1, #inventory do
     local stack = inventory[index]
     if stack and stack.valid_for_read then
-      handled = M.adjust_from_item_stack(state, force_name, surface_name, stack, scale) or handled
+      handled = M.adjust_from_item_stack(state, force_name, surface_name, stack, scale, options) or handled
     end
   end
 

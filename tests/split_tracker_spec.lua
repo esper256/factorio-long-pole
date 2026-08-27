@@ -204,13 +204,14 @@ describe("split_tracker", function()
 
     assert.is_true(ok)
     assert.is_table(result)
-    assert.are.equal(2, #calls)
+    assert.are.equal(3, #calls)
     assert.are.equal("First Power", calls[1].split_name)
     assert.is_nil(calls[1].include_blueprints)
     assert.is_nil(calls[1].include_items)
     assert.are.equal("First Power", calls[2].split_name)
     assert.is_false(calls[2].include_blueprints)
     assert.is_false(calls[2].include_items)
+    assert.are.equal("Starter Burners", calls[3].split_name)
   end)
 
   it("reuses cached root requirements across repeated status refreshes", function()
@@ -386,6 +387,9 @@ describe("split_tracker", function()
     tracker.add_split(state, "Next")
 
     state.splits[1].completed_elapsed_ticks = 300
+    assert.is_true(tracker.set_split_items(state, 1, {
+      {name = "wood", count = 5}
+    }))
     assert.is_true(tracker.set_split_blueprints(state, 2, {
       {
         entity_summary = {
@@ -427,18 +431,25 @@ describe("split_tracker", function()
     })
 
     local status = tracker.get_split_status(state, "player")
+    local previous_kinds = {}
+    for _, group in ipairs(status.previous.icon_groups) do
+      previous_kinds[group.kind] = group
+    end
+    local current_kinds = {}
+    for _, group in ipairs(status.current.icon_groups) do
+      current_kinds[group.kind] = group
+    end
 
-    assert.are.equal(1, #status.previous.icon_groups)
-    assert.are.equal("carry-over-stock", status.previous.icon_groups[1].kind)
+    assert.are.equal("previous-leftover", status.previous.icon_groups[1].kind)
     assert.are.equal("alert", status.previous.icon_groups[1].tone)
-    assert.are.equal("iron-chest", status.previous.icon_groups[1].entries[1].name)
-    assert.are.equal("transport-belt", status.previous.icon_groups[1].entries[2].name)
+    assert.are.equal("wood", previous_kinds["previous-leftover"].entries[1].name)
 
-    assert.are.equal(2, #status.current.icon_groups)
-    assert.are.equal("placement-progress", status.current.icon_groups[1].kind)
-    assert.are.equal("transport-belt", status.current.icon_groups[1].entries[1].name)
-    assert.are.equal(3, status.current.icon_groups[1].entries[1].count)
-    assert.are.equal("research-production", status.current.icon_groups[2].kind)
+    assert.is_not_nil(current_kinds["remaining-work"])
+    assert.are.equal("eta", current_kinds["remaining-work"].sort_mode)
+    assert.is_not_nil(current_kinds["placement-progress"])
+    assert.are.equal("transport-belt", current_kinds["placement-progress"].entries[1].name)
+    assert.are.equal(3, current_kinds["placement-progress"].entries[1].count)
+    assert.is_not_nil(current_kinds["research-production"])
 
     assert.are.equal(1, #status.upcoming[1].icon_groups)
     assert.are.equal("next-split-readiness", status.upcoming[1].icon_groups[1].kind)
@@ -595,5 +606,52 @@ describe("split_tracker", function()
     }))
 
     assert.are.equal(0, #state.splits[1].items)
+  end)
+
+  it("rewinds to the previous split without requiring completion", function()
+    local state = initialized_state_with_plan()
+    state.current_split_started_tick = 100
+    assert.is_true(tracker.advance_split(state, 280))
+    assert.are.equal(2, state.current_split_index)
+    assert.are.equal(180, state.splits[1].completed_elapsed_ticks)
+
+    assert.is_true(tracker.rewind_split(state, 400))
+    assert.are.equal(1, state.current_split_index)
+    assert.is_nil(state.splits[1].completed_elapsed_ticks)
+    assert.are.equal(400, state.current_split_started_tick)
+    assert.is_false(tracker.rewind_split(state, 410))
+  end)
+
+  it("resets the progress ledger when a new plan is imported", function()
+    local state = initialized_state_with_plan()
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-plate", 20)
+    progress_tracker_store.upsert_placed_entity(state, {
+      unit_number = 9,
+      force_name = "player",
+      surface_name = "nauvis",
+      item_name = "stone-furnace",
+      split_id = state.splits[1].id
+    })
+
+    local source = {
+      valid = true,
+      type = "blueprint-book",
+      label = "Imported",
+      blueprint_description = "format=long-pole-plan;version=1\nplan_id=new-plan\nvisibility=references-only\ndefault_surface=nauvis\n",
+      contents = {
+        [1] = {
+          valid = true,
+          type = "blueprint-book",
+          label = "Fresh Split",
+          blueprint_description = "format=long-pole-split;version=1\nsurface=nauvis\n\n--- Extra Items ---\n\n--- Technologies to Research ---\n\n--- Notes ---\n",
+          contents = {}
+        }
+      }
+    }
+
+    assert.is_true(plan_storage.import_plan_from_source(source, state))
+    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-plate"))
+    assert.are.equal(0, progress_tracker_store.get_placed_count(state, "player", "nauvis", "stone-furnace"))
+    assert.are.equal("Fresh Split", state.splits[1].name)
   end)
 end)

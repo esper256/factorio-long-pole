@@ -170,4 +170,31 @@ describe("blueprint_library", function()
       slot = 1
     }, match)
   end)
+
+  it("matches a linked blueprint by path, name, and fingerprint", function()
+    local player = {
+      blueprints = {
+        [1] = blueprint_book("Openers", {
+          [2] = blueprint("export-a", "Starter burner pair")
+        })
+      }
+    }
+    player.blueprints[1].contents[2].get_blueprint_entities = function()
+      return {
+        {name = "burner-mining-drill"},
+        {name = "burner-mining-drill"},
+        {name = "stone-furnace"},
+        {name = "stone-furnace"}
+      }
+    end
+
+    local match = blueprint_library.find_blueprint_by_link(player, {
+      inside_books = {"Openers"},
+      blueprint_name = "Starter burner pair",
+      fingerprint = "burner-mining-drill:2;stone-furnace:2"
+    })
+
+    assert.are.equal(player.blueprints[1].contents[2], match.record)
+    assert.are.equal(2, match.slot)
+  end)
 end)

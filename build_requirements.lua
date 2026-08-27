@@ -6,24 +6,16 @@
 local M = {}
 local config = require("build_requirements_config")
 local recipe_resolver = require("util.recipe_resolver")
+local recipe_heuristic = require("util.recipe_heuristic")
+local eta = require("util.eta")
+local safe_index = require("util.safe_index")
 
 local RAW_RESOURCES_BY_SURFACE = config.raw_resources_by_surface or {}
 local HIDDEN_RAW_RESOURCES_BY_SURFACE = config.hidden_raw_resources_by_surface or {}
 local IGNORED_REQUIREMENT_KEYS = config.ignored_requirement_keys or {}
 
 local function try_index(root, key)
-  if root == nil then
-    return nil
-  end
-
-  local ok, value = pcall(function()
-    return root[key]
-  end)
-  if ok then
-    return value
-  end
-
-  return nil
+  return safe_index.get(root, key)
 end
 
 local function add_total(totals, kind, name, count)
@@ -357,7 +349,7 @@ local function build_root_requirements(split, options)
   local include_technologies = options.include_technologies ~= false
   local blueprint_satisfaction_mode = options.blueprint_satisfaction_mode or "placed_or_loose"
   local item_satisfaction_mode = options.item_satisfaction_mode or "loose_only"
-  local technology_satisfaction_mode = options.technology_satisfaction_mode or "loose_only"
+  local technology_satisfaction_mode = options.technology_satisfaction_mode or "research"
 
   if include_blueprints then
     for _, blueprint in ipairs(split.blueprints or {}) do
@@ -387,8 +379,7 @@ local function build_root_requirements(split, options)
   if include_technologies then
     for _, technology in ipairs(split.technologies or {}) do
       if technology.name and technology.name ~= "" then
-        -- PRODUCT.md §5: the last research item is labs consuming packs. Until a
-        -- lab-throughput source exists, loose packs are a stand-in, not the goal.
+        -- PRODUCT.md §5: the last research item is labs consuming packs.
         for _, component in ipairs(resolve_technology_components(technology.name)) do
           add_root_requirement(
             root_requirements,
@@ -485,6 +476,10 @@ local function reserve_direct_requirement(pools, kind, name, count, satisfaction
     return reserve_from_pool(pools.placed_by_key, key, count)
   end
 
+  if satisfaction_mode == "research" then
+    return 0
+  end
+
   if satisfaction_mode == "placed_or_loose" then
     reserved = reserved + reserve_from_pool(pools.placed_by_key, key, count)
     reserved = reserved + reserve_from_pool(pools.stock_by_key, key, count - reserved)
@@ -494,20 +489,48 @@ local function reserve_direct_requirement(pools, kind, name, count, satisfaction
   return reserve_from_pool(pools.stock_by_key, key, count)
 end
 
+local function research_consumed_by_item(split, snapshot, technology_prototypes)
+  local consumed = {}
+  local research = snapshot and snapshot.research or {}
+  local by_name = research.by_name or {}
+
+  for _, technology in ipairs(split and split.technologies or {}) do
+    if technology.name and technology.name ~= "" then
+      local info = by_name[technology.name] or {}
+      local progress = 0
+      if info.researched then
+        progress = 1
+      else
+        progress = tonumber(info.progress) or 0
+      end
+      for _, pack in ipairs(M.resolve_technology_requirements(technology.name, technology_prototypes)) do
+        local key = format_requirement_key(pack.kind or "item", pack.name)
+        consumed[key] = (consumed[key] or 0) + (pack.count or 0) * progress
+      end
+    end
+  end
+
+  return consumed
+end
+
+local function reserve_research_credit(credits, kind, name, count)
+  local key = format_requirement_key(kind, name)
+  local available = credits[key] or 0
+  if available <= 0 or count <= 0 then
+    return 0
+  end
+
+  local reserved = math.min(available, count)
+  credits[key] = available - reserved
+  return reserved
+end
+
 local function batch_count_for_requirement(required_count, product_amount)
   if not (required_count and required_count > 0 and product_amount and product_amount > 0) then
     return 0
   end
 
   return math.ceil((required_count / product_amount) - 0.0000001)
-end
-
-local function missing_score(entries_by_key)
-  local score = 0
-  for _, entry in pairs(entries_by_key or {}) do
-    score = score + math.max(0, (entry.required_count or 0) - (entry.fulfilled_count or 0))
-  end
-  return score
 end
 
 local function requirement_progress_to_summary(entries_by_key)
@@ -545,63 +568,54 @@ local function requirement_progress_to_summary(entries_by_key)
   return summary
 end
 
--- Current default: pick the recipe whose remaining-ingredient score is lowest.
--- PRODUCT.md §4: this policy must stay swappable. Do not spread oil-ratio or
--- similar heuristics into summarize_missing_requirements call sites.
+-- PRODUCT.md §4: recipe choice lives in the replaceable heuristic module.
 local function choose_recipe_for_missing_requirement(kind, name, remaining_count, context, active_stack)
-  local matching_recipes = context.resolve_recipe_set(kind, name, context.surface_name) or {}
-  local best_candidate = nil
-  local first_error_message = nil
+  local matching_recipes = (context.resolve_recipe_set and context.resolve_recipe_set(kind, name, context.surface_name)) or {}
 
-  for _, recipe in ipairs(matching_recipes) do
+  local function plan_recipe(recipe, amount, pools)
     local product_amount = recipe_resolver.product_amount_for_result(recipe, kind, name)
-    local batch_count = batch_count_for_requirement(remaining_count, product_amount)
-    if batch_count > 0 then
-      local candidate_context = {
-        surface_name = context.surface_name,
-        resolve_recipe_set = context.resolve_recipe_set,
-        pools = {
-          stock_by_key = copy_counts(context.pools.stock_by_key),
-          placed_by_key = copy_counts(context.pools.placed_by_key)
-        },
-        progress_entries_by_key = {}
-      }
-      local error_message = nil
+    local batch_count = batch_count_for_requirement(amount or remaining_count, product_amount)
+    if batch_count <= 0 then
+      return nil
+    end
 
-      for _, ingredient in ipairs(recipe.ingredients or {}) do
-        error_message = M.plan_missing_requirement(
-          ingredient_kind(ingredient),
-          ingredient.name,
-          ingredient_amount(ingredient) * batch_count,
-          "loose_only",
-          candidate_context,
-          active_stack
-        )
-        if error_message then
-          first_error_message = first_error_message or error_message
-          break
-        end
-      end
+    local source_pools = pools or context.pools
+    local candidate_context = {
+      surface_name = context.surface_name,
+      resolve_recipe_set = context.resolve_recipe_set,
+      recipe_ratios = context.recipe_ratios,
+      research_consumed_by_key = copy_counts(context.research_consumed_by_key),
+      pools = {
+        stock_by_key = copy_counts(source_pools.stock_by_key),
+        placed_by_key = copy_counts(source_pools.placed_by_key)
+      },
+      progress_entries_by_key = {}
+    }
+    local error_message = nil
 
-      if not error_message then
-        local candidate_score = missing_score(candidate_context.progress_entries_by_key)
-        local recipe_name = recipe.name or ""
-        local best_recipe_name = best_candidate and (best_candidate.recipe.name or "") or ""
-        if not best_candidate
-          or candidate_score < best_candidate.score
-          or (candidate_score == best_candidate.score and recipe_name < best_recipe_name) then
-          best_candidate = {
-            recipe = recipe,
-            score = candidate_score,
-            pools = candidate_context.pools,
-            progress_entries_by_key = candidate_context.progress_entries_by_key
-          }
-        end
+    for _, ingredient in ipairs(recipe.ingredients or {}) do
+      error_message = M.plan_missing_requirement(
+        ingredient_kind(ingredient),
+        ingredient.name,
+        ingredient_amount(ingredient) * batch_count,
+        "loose_only",
+        candidate_context,
+        active_stack
+      )
+      if error_message then
+        return nil, error_message
       end
     end
+
+    return {
+      recipe = recipe,
+      score = recipe_heuristic.score_entries(candidate_context.progress_entries_by_key),
+      pools = candidate_context.pools,
+      progress_entries_by_key = candidate_context.progress_entries_by_key
+    }
   end
 
-  return best_candidate, first_error_message
+  return recipe_heuristic.choose_recipe(matching_recipes, context, remaining_count, plan_recipe)
 end
 
 function M.plan_missing_requirement(kind, name, count, satisfaction_mode, context, active_stack)
@@ -611,7 +625,12 @@ function M.plan_missing_requirement(kind, name, count, satisfaction_mode, contex
 
   add_progress_entry(context.progress_entries_by_key, kind, name, count, 0)
 
-  local fulfilled_count = reserve_direct_requirement(context.pools, kind, name, count, satisfaction_mode)
+  local fulfilled_count = 0
+  if satisfaction_mode == "research" then
+    fulfilled_count = reserve_research_credit(context.research_consumed_by_key, kind, name, count)
+  else
+    fulfilled_count = reserve_direct_requirement(context.pools, kind, name, count, satisfaction_mode)
+  end
   if fulfilled_count > 0 then
     add_progress_entry(context.progress_entries_by_key, kind, name, 0, fulfilled_count)
   end
@@ -619,6 +638,15 @@ function M.plan_missing_requirement(kind, name, count, satisfaction_mode, contex
   local remaining_count = count - fulfilled_count
   if remaining_count <= 0 then
     return nil
+  end
+
+  if satisfaction_mode == "research" then
+    local stock_key = format_requirement_key(kind, name)
+    local in_stock = context.pools.stock_by_key[stock_key] or 0
+    remaining_count = math.max(0, remaining_count - in_stock)
+    if remaining_count <= 0 then
+      return nil
+    end
   end
 
   local entry_key = context.surface_name .. ":" .. format_requirement_key(kind, name)
@@ -654,6 +682,8 @@ local function build_context(snapshot, options)
   return {
     surface_name = options.surface_name,
     resolve_recipe_set = options.resolve_recipe_set,
+    recipe_ratios = options.recipe_ratios,
+    research_consumed_by_key = copy_counts(options.research_consumed_by_key),
     pools = {
       stock_by_key = copy_counts(initial_pools.stock_by_key),
       placed_by_key = copy_counts(initial_pools.placed_by_key)
@@ -666,9 +696,12 @@ function M.summarize_direct_requirement_progress(split, snapshot, options)
   options = options or {}
 
   local surface_name = split.surface or options.surface_name or "nauvis"
+  local technology_prototypes = options.technology_prototypes or get_technology_prototypes()
   local context = build_context(snapshot, {
     surface_name = surface_name,
     resolve_recipe_set = options.resolve_recipe_set,
+    recipe_ratios = options.recipe_ratios,
+    research_consumed_by_key = research_consumed_by_item(split, snapshot, technology_prototypes),
     initial_pools = options.initial_pools
   })
   local root_requirements = options.root_requirements or build_root_requirements(split, options)
@@ -682,13 +715,23 @@ function M.summarize_direct_requirement_progress(split, snapshot, options)
       0
     )
 
-    local fulfilled_count = reserve_direct_requirement(
-      context.pools,
-      requirement.kind,
-      requirement.name,
-      requirement.count,
-      requirement.satisfaction_mode
-    )
+    local fulfilled_count
+    if requirement.satisfaction_mode == "research" then
+      fulfilled_count = reserve_research_credit(
+        context.research_consumed_by_key,
+        requirement.kind,
+        requirement.name,
+        requirement.count
+      )
+    else
+      fulfilled_count = reserve_direct_requirement(
+        context.pools,
+        requirement.kind,
+        requirement.name,
+        requirement.count,
+        requirement.satisfaction_mode
+      )
+    end
     if fulfilled_count > 0 then
       add_progress_entry(
         context.progress_entries_by_key,
@@ -708,11 +751,15 @@ function M.summarize_missing_requirements(split, snapshot, options)
 
   local surface_name = split.surface or options.surface_name or "nauvis"
   local recipe_prototypes = options.recipe_prototypes or recipe_resolver.get_recipe_prototypes()
+  local technology_prototypes = options.technology_prototypes or get_technology_prototypes()
+  local resolve_recipe_set = options.resolve_recipe_set or function(kind, name, resolved_surface_name)
+    return recipe_resolver.find_recipes_for_result(kind, name, resolved_surface_name, recipe_prototypes)
+  end
   local context = build_context(snapshot, {
     surface_name = surface_name,
-    resolve_recipe_set = options.resolve_recipe_set or function(kind, name, resolved_surface_name)
-      return recipe_resolver.find_recipes_for_result(kind, name, resolved_surface_name, recipe_prototypes)
-    end,
+    resolve_recipe_set = resolve_recipe_set,
+    recipe_ratios = options.recipe_ratios,
+    research_consumed_by_key = research_consumed_by_item(split, snapshot, technology_prototypes),
     initial_pools = options.initial_pools
   })
   local root_requirements = options.root_requirements or build_root_requirements(split, options)
@@ -730,7 +777,30 @@ function M.summarize_missing_requirements(split, snapshot, options)
     first_error_message = first_error_message or error_message
   end
 
-  return requirement_progress_to_summary(context.progress_entries_by_key), first_error_message, context.pools
+  local summary = requirement_progress_to_summary(context.progress_entries_by_key)
+  eta.attach(summary, snapshot, {
+    surface_name = surface_name,
+    resolve_recipe_set = resolve_recipe_set
+  })
+  table.sort(summary, function(a, b)
+    local eta_a = a.eta_seconds or math.huge
+    local eta_b = b.eta_seconds or math.huge
+    if eta_a ~= eta_b then
+      return eta_a > eta_b
+    end
+    if a.count == b.count then
+      if a.progress == b.progress then
+        if a.kind == b.kind then
+          return a.name < b.name
+        end
+        return a.kind < b.kind
+      end
+      return a.progress < b.progress
+    end
+    return a.count > b.count
+  end)
+
+  return summary, first_error_message, context.pools
 end
 
 function M.find_recipes_for_result(kind, name, surface_name, recipe_prototypes)

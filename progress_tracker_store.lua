@@ -3,7 +3,7 @@
 -- source of truth (PRODUCT.md §11, §14).
 local M = {}
 
-local STORAGE_VERSION = 2
+local STORAGE_VERSION = 3
 local DEFAULT_FORCE_NAME = "player"
 
 local function normalize_force_name(force_name)
@@ -46,7 +46,9 @@ local function copy_item_entry(entry)
     placed_count = entry.placed_count,
     current_split_claim = entry.current_split_claim,
     produced_total = entry.produced_total,
-    consumed_total = entry.consumed_total
+    consumed_total = entry.consumed_total,
+    produced_rate = entry.produced_rate or 0,
+    consumed_rate = entry.consumed_rate or 0
   }
 end
 
@@ -64,11 +66,25 @@ local function ensure_force(root, force_name)
   local force = root.forces[normalized_force_name]
   if force then
     force.surfaces = force.surfaces or {}
+    force.research = force.research or {
+      by_name = {},
+      current_name = nil,
+      pack_consumption_per_minute = {},
+      lab_working_count = 0
+    }
+    force.research.by_name = force.research.by_name or {}
+    force.research.pack_consumption_per_minute = force.research.pack_consumption_per_minute or {}
     return force
   end
 
   force = {
-    surfaces = {}
+    surfaces = {},
+    research = {
+      by_name = {},
+      current_name = nil,
+      pack_consumption_per_minute = {},
+      lab_working_count = 0
+    }
   }
   root.forces[normalized_force_name] = force
   return force
@@ -89,6 +105,7 @@ local function ensure_surface(root, force_name, surface_name)
     surface.placed_counts_by_split_id = surface.placed_counts_by_split_id or {}
     surface.production_totals = surface.production_totals or {}
     surface.production_input_exclusions = surface.production_input_exclusions or {}
+    surface.flow_rates = surface.flow_rates or {}
     surface.uncertainty = surface.uncertainty or {}
     return surface
   end
@@ -100,6 +117,7 @@ local function ensure_surface(root, force_name, surface_name)
     placed_counts_by_split_id = {},
     production_totals = {},
     production_input_exclusions = {},
+    flow_rates = {},
     uncertainty = {}
   }
   force.surfaces[normalized_surface_name] = surface
@@ -125,13 +143,15 @@ end
 
 local function change_loose_stock(surface, item_name, delta)
   local current = surface.loose_stock[item_name] or 0
-  local updated = math.max(0, current + delta)
+  local requested = current + delta
+  local updated = math.max(0, requested)
+  local clamped = requested < 0
   if updated == current then
-    return updated
+    return updated, clamped
   end
   surface.loose_stock[item_name] = updated
   remove_zero_entry(surface.loose_stock, item_name)
-  return updated
+  return updated, clamped
 end
 
 local function change_non_negative_count(entries, item_name, delta)
@@ -197,50 +217,50 @@ local function change_split_claim_count(surface, split_id, item_name, delta)
   return updated
 end
 
+local function snapshot_entry(surface, item_name, overrides)
+  local totals = surface.production_totals[item_name] or {}
+  local rates = surface.flow_rates[item_name] or {}
+  local entry = {
+    item_name = item_name,
+    loose_stock = surface.loose_stock[item_name] or 0,
+    placed_count = surface.placed_counts[item_name] or 0,
+    current_split_claim = 0,
+    produced_total = totals.produced_total or 0,
+    consumed_total = totals.consumed_total or 0,
+    produced_rate = rates.produced_rate or 0,
+    consumed_rate = rates.consumed_rate or 0
+  }
+  for key, value in pairs(overrides or {}) do
+    entry[key] = value
+  end
+  return entry
+end
+
 local function build_snapshot_entries(surface)
   local entry_by_item = {}
 
   for item_name, count in pairs(surface.loose_stock) do
-    local produced_total = surface.production_totals[item_name] and surface.production_totals[item_name].produced_total or 0
-    local consumed_total = surface.production_totals[item_name] and surface.production_totals[item_name].consumed_total or 0
-    entry_by_item[item_name] = {
-      item_name = item_name,
-      loose_stock = count,
-      placed_count = surface.placed_counts[item_name] or 0,
-      current_split_claim = 0,
-      produced_total = produced_total,
-      consumed_total = consumed_total
-    }
+    entry_by_item[item_name] = snapshot_entry(surface, item_name, {loose_stock = count})
   end
 
   for item_name, count in pairs(surface.placed_counts) do
     if not entry_by_item[item_name] then
-      local produced_total = surface.production_totals[item_name] and surface.production_totals[item_name].produced_total or 0
-      local consumed_total = surface.production_totals[item_name] and surface.production_totals[item_name].consumed_total or 0
-      entry_by_item[item_name] = {
-        item_name = item_name,
-        loose_stock = surface.loose_stock[item_name] or 0,
-        placed_count = count,
-        current_split_claim = 0,
-        produced_total = produced_total,
-        consumed_total = consumed_total
-      }
+      entry_by_item[item_name] = snapshot_entry(surface, item_name, {placed_count = count})
     end
   end
 
   for item_name, totals in pairs(surface.production_totals) do
     if not entry_by_item[item_name] then
-      entry_by_item[item_name] = {
-        item_name = item_name,
-        loose_stock = surface.loose_stock[item_name] or 0,
-        placed_count = surface.placed_counts[item_name] or 0,
-        current_split_claim = 0,
+      entry_by_item[item_name] = snapshot_entry(surface, item_name, {
         produced_total = totals.produced_total or 0,
         consumed_total = totals.consumed_total or 0
-      }
-    else
-      entry_by_item[item_name].produced_total = totals.produced_total or 0
-      entry_by_item[item_name].consumed_total = totals.consumed_total or 0
+      })
+    end
+  end
+
+  for item_name in pairs(surface.flow_rates or {}) do
+    if not entry_by_item[item_name] then
+      entry_by_item[item_name] = snapshot_entry(surface, item_name)
     end
   end
 
@@ -269,6 +289,11 @@ function M.init(state)
   return state.progress_tracker
 end
 
+function M.reset(state)
+  state.progress_tracker = nil
+  return M.init(state)
+end
+
 function M.ensure_surface(state, force_name, surface_name)
   return ensure_surface(ensure_root(state), force_name, surface_name)
 end
@@ -291,7 +316,7 @@ function M.set_loose_stock(state, force_name, surface_name, item_name, count)
   return true
 end
 
-function M.adjust_loose_stock(state, force_name, surface_name, item_name, delta)
+function M.adjust_loose_stock(state, force_name, surface_name, item_name, delta, options)
   local normalized_item_name = normalize_item_name(item_name)
   local normalized_delta = normalize_delta(delta)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
@@ -299,7 +324,16 @@ function M.adjust_loose_stock(state, force_name, surface_name, item_name, delta)
     return false
   end
 
-  change_loose_stock(surface, normalized_item_name, normalized_delta)
+  local _, clamped = change_loose_stock(surface, normalized_item_name, normalized_delta)
+  if clamped then
+    M.mark_surface_uncertain(
+      state,
+      force_name,
+      surface_name,
+      options and options.tick or nil,
+      "stock-would-go-negative:" .. normalized_item_name
+    )
+  end
   return true
 end
 
@@ -396,6 +430,78 @@ function M.add_production_input_exclusion(state, force_name, surface_name, item_
   return true
 end
 
+local function merge_quality_counts(quality_counts, fallback_counts)
+  if type(quality_counts) ~= "table" then
+    return fallback_counts or {}
+  end
+
+  local merged = {}
+  local found = false
+  for _, item_counts in pairs(quality_counts) do
+    if type(item_counts) == "table" then
+      for item_name, count in pairs(item_counts) do
+        found = true
+        merged[item_name] = (merged[item_name] or 0) + (tonumber(count) or 0)
+      end
+    end
+  end
+
+  if found then
+    return merged
+  end
+
+  return fallback_counts or {}
+end
+
+local function read_flow_rate(statistics, item_name, category)
+  if not (statistics and statistics.get_flow_count and item_name) then
+    return nil
+  end
+
+  local precision = nil
+  local precision_root = rawget(_G, "defines")
+  precision_root = precision_root and precision_root.flow_precision_index
+  if precision_root then
+    precision = precision_root.five_seconds or precision_root.one_minute
+  end
+  if not precision then
+    return nil
+  end
+
+  local function to_per_minute(rate)
+    if type(rate) ~= "number" then
+      return nil
+    end
+    -- get_flow_count with count=false is average items per tick.
+    return rate * 3600
+  end
+
+  local ok, rate = pcall(statistics.get_flow_count, statistics, {
+    name = item_name,
+    category = category,
+    precision_index = precision,
+    count = false
+  })
+  if ok then
+    local per_minute = to_per_minute(rate)
+    if per_minute then
+      return per_minute
+    end
+  end
+
+  ok, rate = pcall(statistics.get_flow_count, {
+    name = item_name,
+    category = category,
+    precision_index = precision,
+    count = false
+  })
+  if ok then
+    return to_per_minute(rate)
+  end
+
+  return nil
+end
+
 function M.get_production_totals(state, force_name, surface_name, item_name)
   local normalized_item_name = normalize_item_name(item_name)
   local surface = ensure_surface(ensure_root(state), force_name, surface_name)
@@ -417,8 +523,8 @@ function M.sync_item_production_statistics(state, force_name, surface_name, stat
     return false
   end
 
-  local input_counts = statistics.input_counts or {}
-  local output_counts = statistics.output_counts or {}
+  local input_counts = merge_quality_counts(statistics.input_quality_counts, statistics.input_counts or {})
+  local output_counts = merge_quality_counts(statistics.output_quality_counts, statistics.output_counts or {})
   local item_names = {}
 
   for item_name in pairs(input_counts) do
@@ -443,7 +549,18 @@ function M.sync_item_production_statistics(state, force_name, surface_name, stat
       local current_input_count = normalize_statistics_count(input_counts[normalized_item_name])
       local current_output_count = normalize_statistics_count(output_counts[normalized_item_name])
 
+      local produced_rate = read_flow_rate(statistics, normalized_item_name, "input")
+      local consumed_rate = read_flow_rate(statistics, normalized_item_name, "output")
+      if produced_rate or consumed_rate then
+        surface.flow_rates[normalized_item_name] = {
+          produced_rate = produced_rate or 0,
+          consumed_rate = consumed_rate or 0
+        }
+        handled = true
+      end
+
       if current_input_count < totals.last_input_count or current_output_count < totals.last_output_count then
+        M.mark_surface_uncertain(state, force_name, surface_name, nil, "production-statistics-reset")
         totals.last_input_count = current_input_count
         totals.last_output_count = current_output_count
         handled = true
@@ -464,7 +581,16 @@ function M.sync_item_production_statistics(state, force_name, surface_name, stat
           totals.consumed_total = totals.consumed_total + consumed_delta
         end
         if applied_produced_delta ~= 0 or consumed_delta ~= 0 then
-          change_loose_stock(surface, normalized_item_name, applied_produced_delta - consumed_delta)
+          local _, clamped = change_loose_stock(surface, normalized_item_name, applied_produced_delta - consumed_delta)
+          if clamped then
+            M.mark_surface_uncertain(
+              state,
+              force_name,
+              surface_name,
+              nil,
+              "stock-would-go-negative:" .. normalized_item_name
+            )
+          end
           handled = true
         end
         if excluded_produced ~= 0 then
@@ -478,6 +604,101 @@ function M.sync_item_production_statistics(state, force_name, surface_name, stat
   end
 
   return handled
+end
+
+function M.set_research_progress(state, force_name, technology_name, progress)
+  local force = ensure_force(ensure_root(state), force_name)
+  if not (force and type(technology_name) == "string" and technology_name ~= "") then
+    return false
+  end
+
+  local numeric = tonumber(progress) or 0
+  if numeric < 0 then
+    numeric = 0
+  end
+  if numeric > 1 then
+    numeric = 1
+  end
+
+  force.research.by_name[technology_name] = force.research.by_name[technology_name] or {}
+  force.research.by_name[technology_name].progress = numeric
+  force.research.by_name[technology_name].researched = numeric >= 1
+  return true
+end
+
+function M.set_technology_researched(state, force_name, technology_name, researched)
+  local force = ensure_force(ensure_root(state), force_name)
+  if not (force and type(technology_name) == "string" and technology_name ~= "") then
+    return false
+  end
+
+  force.research.by_name[technology_name] = force.research.by_name[technology_name] or {}
+  force.research.by_name[technology_name].researched = researched == true
+  if researched then
+    force.research.by_name[technology_name].progress = 1
+  end
+  return true
+end
+
+function M.set_current_research(state, force_name, technology_name, progress)
+  local force = ensure_force(ensure_root(state), force_name)
+  if not force then
+    return false
+  end
+
+  force.research.current_name = technology_name
+  if technology_name then
+    M.set_research_progress(state, force_name, technology_name, progress or 0)
+  end
+  return true
+end
+
+function M.set_lab_working_count(state, force_name, count)
+  local force = ensure_force(ensure_root(state), force_name)
+  if not force then
+    return false
+  end
+
+  force.research.lab_working_count = math.max(0, math.floor(tonumber(count) or 0))
+  return true
+end
+
+function M.set_pack_consumption_rate(state, force_name, item_name, rate)
+  local force = ensure_force(ensure_root(state), force_name)
+  local normalized_item_name = normalize_item_name(item_name)
+  if not (force and normalized_item_name) then
+    return false
+  end
+
+  force.research.pack_consumption_per_minute[normalized_item_name] = math.max(0, tonumber(rate) or 0)
+  return true
+end
+
+function M.get_research_snapshot(state, force_name)
+  local force = ensure_force(ensure_root(state), force_name)
+  return {
+    current_name = force.research.current_name,
+    by_name = force.research.by_name,
+    pack_consumption_per_minute = force.research.pack_consumption_per_minute,
+    lab_working_count = force.research.lab_working_count or 0
+  }
+end
+
+function M.clear_split_claims(state, split_id)
+  if split_id == nil then
+    return false
+  end
+
+  local root = ensure_root(state)
+  for _, force in pairs(root.forces) do
+    for _, surface in pairs(force.surfaces or {}) do
+      if surface.placed_counts_by_split_id then
+        surface.placed_counts_by_split_id[split_id] = nil
+      end
+    end
+  end
+
+  return true
 end
 
 function M.mark_surface_uncertain(state, force_name, surface_name, tick, reason)
@@ -515,7 +736,8 @@ function M.get_surface_snapshot(state, force_name, surface_name, split_id)
       force_name = resolved_force_name,
       surface_name = surface_name,
       entries = {},
-      uncertainty = {}
+      uncertainty = {},
+      research = M.get_research_snapshot(state, resolved_force_name)
     }
   end
 
@@ -535,7 +757,8 @@ function M.get_surface_snapshot(state, force_name, surface_name, split_id)
     uncertainty = {
       since_tick = surface.uncertainty.since_tick,
       reason = surface.uncertainty.reason
-    }
+    },
+    research = M.get_research_snapshot(state, resolved_force_name)
   }
 end
 

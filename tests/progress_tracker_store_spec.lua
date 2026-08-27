@@ -7,7 +7,7 @@ describe("progress_tracker_store", function()
     local root = progress_tracker_store.init(state)
 
     assert.is_table(root)
-    assert.are.equal(2, root.storage_version)
+    assert.are.equal(3, root.storage_version)
     assert.is_table(root.forces)
     assert.is_table(root.placed_entity_index)
   end)
@@ -163,7 +163,9 @@ describe("progress_tracker_store", function()
       placed_count = 2,
       current_split_claim = 1,
       produced_total = 0,
-      consumed_total = 2
+      consumed_total = 2,
+      produced_rate = 0,
+      consumed_rate = 0
     }, snapshot.entries[1])
     assert.are.same({
       item_name = "burner-mining-drill",
@@ -171,7 +173,9 @@ describe("progress_tracker_store", function()
       placed_count = 1,
       current_split_claim = 1,
       produced_total = 0,
-      consumed_total = 0
+      consumed_total = 0,
+      produced_rate = 0,
+      consumed_rate = 0
     }, snapshot.entries[2])
     assert.are.same({
       item_name = "transport-belt",
@@ -179,7 +183,9 @@ describe("progress_tracker_store", function()
       placed_count = 0,
       current_split_claim = 0,
       produced_total = 14,
-      consumed_total = 0
+      consumed_total = 0,
+      produced_rate = 0,
+      consumed_rate = 0
     }, snapshot.entries[3])
   end)
 
@@ -214,5 +220,47 @@ describe("progress_tracker_store", function()
     assert.is_true(progress_tracker_store.remove_placed_entity(state, 21))
     local removed_snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis", 5)
     assert.are.equal(0, #removed_snapshot.entries)
+  end)
+
+  it("resets the ledger and marks underflow as uncertain without inventing production", function()
+    local state = {}
+    progress_tracker_store.init(state)
+    progress_tracker_store.set_loose_stock(state, "player", "nauvis", "iron-plate", 2)
+    progress_tracker_store.adjust_loose_stock(state, "player", "nauvis", "iron-plate", -9, {tick = 12})
+
+    local snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis")
+    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-plate"))
+    assert.are.equal(12, snapshot.uncertainty.since_tick)
+    assert.is_truthy(snapshot.uncertainty.reason)
+
+    progress_tracker_store.sync_item_production_statistics(state, "player", "nauvis", {
+      input_counts = {["iron-plate"] = 8},
+      output_counts = {}
+    })
+    progress_tracker_store.sync_item_production_statistics(state, "player", "nauvis", {
+      input_counts = {["iron-plate"] = 3},
+      output_counts = {}
+    })
+    local produced_total = progress_tracker_store.get_production_totals(state, "player", "nauvis", "iron-plate")
+    assert.are.equal(8, produced_total)
+    snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis")
+    assert.are.equal("production-statistics-reset", snapshot.uncertainty.reason)
+
+    progress_tracker_store.reset(state)
+    assert.are.equal(0, progress_tracker_store.get_loose_stock(state, "player", "nauvis", "iron-plate"))
+    assert.are.equal(3, state.progress_tracker.storage_version)
+  end)
+
+  it("stores research progress separately from loose science packs", function()
+    local state = {}
+    progress_tracker_store.init(state)
+    progress_tracker_store.set_research_progress(state, "player", "automation", 0.5)
+    progress_tracker_store.set_pack_consumption_rate(state, "player", "automation-science-pack", 12)
+    progress_tracker_store.set_lab_working_count(state, "player", 3)
+
+    local snapshot = progress_tracker_store.get_surface_snapshot(state, "player", "nauvis")
+    assert.are.equal(0.5, snapshot.research.by_name.automation.progress)
+    assert.are.equal(12, snapshot.research.pack_consumption_per_minute["automation-science-pack"])
+    assert.are.equal(3, snapshot.research.lab_working_count)
   end)
 end)
