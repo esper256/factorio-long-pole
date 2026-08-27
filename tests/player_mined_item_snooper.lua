@@ -26,4 +26,4 @@ snooper.on_event({
   }
 })
 
-assert(storage.long_pole.debug_game_state.surfaces.nauvis.products["iron-plate"].produced == 3)
+assert(storage.long_pole.ledger.surfaces.nauvis.products["iron-plate"].produced == 3)

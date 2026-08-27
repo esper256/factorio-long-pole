@@ -21,8 +21,8 @@ factorio-long-pole/
 ├── speedrun_plan/
 ├── game_state/
 ├── progress_analysis/
-├── recipe_resolution/      (not created yet)
-├── recipe_analysis/        (not created yet)
+├── recipe_resolution/
+├── recipe_analysis/
 ├── storage/
 ├── snoopers/
 ├── hud/

@@ -4,6 +4,12 @@ Date: 2026-08-27
     - Land the total rewrite on main for Factorio 2.1 experimental.
     - Plans are [LP] blueprint books plus description metadata; no plan editor.
     - Keep product rules from the 2026-08-27 clarification (PRODUCT.md).
+    - Current split is placement of this print; next split production is that print plus extras.
+    - Extra stock belongs on the split that needs it. No separate harvest HUD.
+    - Research progress is packs consumed in labs, with lab throughput on the tooltip.
+    - Advance and rewind are unbound from completion (Shift+Period / Shift+Comma).
+    - Ledger harvest covers trees, rocks, wreck loot, robot mining, and script destroy.
+    - Recipe selection is a replaceable module; next-split shortfalls walk to limiting ingredients.
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.1
 Date: 2026-07-22

@@ -15,7 +15,7 @@ snooper.on_event({
   }
 })
 
-local surface = storage.long_pole.debug_game_state.surfaces["platform-1"]
+local surface = storage.long_pole.ledger.surfaces["platform-1"]
 assert(surface.placed_entities["space-platform-foundation"].placed == 1)
 assert(surface.products["space-platform-foundation"].placed == 1)
 

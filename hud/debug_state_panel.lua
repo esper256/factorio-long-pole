@@ -130,8 +130,17 @@ function M.refresh(player, state)
     return
   end
 
-  M.hide(player)
-  build_panel(player, state)
+  local frame = player.gui.left[PANEL_NAME]
+  local table_element = frame.rows
+  table_element.clear()
+  for _, caption in ipairs(HEADING_CAPTIONS) do
+    local heading = table_element.add({
+      type = "label",
+      caption = caption
+    })
+    heading.style.font = "default-bold"
+  end
+  build_rows(table_element, state)
 end
 
 function M.toggle(player, state)

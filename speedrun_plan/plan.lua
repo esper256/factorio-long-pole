@@ -25,15 +25,29 @@ local function sorted_names(map)
   return names
 end
 
+local function merged_counts(placement_counts, extra_counts)
+  local merged = {}
+  for name, count in pairs(placement_counts or {}) do
+    merged[name] = count
+  end
+  for name, count in pairs(extra_counts or {}) do
+    merged[name] = (merged[name] or 0) + count
+  end
+  return merged
+end
+
 local function new_split(source)
+  local production_item_counts = merged_counts(source.placement_item_counts, source.extra_item_counts)
   local split = {
     label = source.label,
     source_page_index = source.source_page_index,
     placement_item_counts = source.placement_item_counts,
     extra_item_counts = source.extra_item_counts,
+    production_item_counts = production_item_counts,
     research_technologies = source.research_technologies,
     placement_item_names = sorted_names(source.placement_item_counts),
     extra_item_names = sorted_names(source.extra_item_counts),
+    production_item_names = sorted_names(production_item_counts),
     research_technology_names = sorted_names(source.research_technologies)
   }
   return setmetatable(split, SplitMetatable)
@@ -81,6 +95,12 @@ end
 
 function SplitMethods:extra_item_count(item_name)
   return self.extra_item_counts[item_name] or 0
+end
+
+-- Blueprint placement plus extra stock. This is what the factory should make
+-- while the previous split is being placed.
+function SplitMethods:production_item_count(item_name)
+  return self.production_item_counts[item_name] or 0
 end
 
 function SplitMethods:requires_research(technology_name)

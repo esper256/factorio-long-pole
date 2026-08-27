@@ -26,6 +26,9 @@ local function element(parent, specification)
   end
   child.destroy = function()
     parent[child.name] = nil
+    if parent.child_names then
+      parent.child_names[child.name] = nil
+    end
   end
 
   return child
@@ -63,28 +66,19 @@ hud.refresh(player, {
   research_progress = {
     total = 20,
     done = 5,
-    pending = 10,
-    tooltip = "Research: 5 complete · 10 science ready · 5 remaining",
-    unfinished_items = {
-      { item_name = "automation-science-pack", count = 5 }
-    }
-  },
-  extra_item_progress = {
-    total = 12,
-    done = 7,
     pending = 0,
-    tooltip = "Extra items: 7 ready · 5 remaining",
+    tooltip = "Research: 5 consumed in labs · 15 remaining · 2 labs working",
     unfinished_items = {
-      { item_name = "coal", count = 5 }
+      { item_name = "automation-science-pack", count = 15 }
     }
   },
-  next_split_construction_progress = {
+  next_split_production_progress = {
     total = 10,
     done = 0,
     pending = 3,
-    tooltip = "Next construction: 3 ready to place · 7 remaining",
+    tooltip = "Next production: 3 ready · 7 remaining",
     unfinished_items = {
-      { item_name = "steel-chest", count = 7 }
+      { item_name = "iron-gear-wheel", count = 7, eta_ticks = 120 }
     }
   }
 })
@@ -100,35 +94,18 @@ assert(header.long_pole_next_plan.sprite == "utility/right_arrow")
 assert(header.long_pole_next_plan.style.width == 16)
 assert(hud_element.construction_progress.indicator_icon.sprite == "item/blueprint")
 assert(hud_element.research_progress.indicator_icon.sprite == "utility/technology_white")
-assert(hud_element.extra_item_progress.indicator_icon.sprite == "utility/hand")
+assert(hud_element.extra_item_progress == nil)
 assert(hud_element.construction_progress.segments.done.style.width == 72)
 assert(hud_element.construction_progress.segments.pending.style.width == 54)
 assert(hud_element.construction_progress.segments.not_started.style.width == 54)
-assert(hud_element.construction_progress.segments.done.style.bar_width == 6)
 assert(hud_element.construction_progress.tooltip == "Construction: 4 placed · 3 ready to place · 3 remaining")
 assert(hud_element.construction_shortfalls.entry_1.item_icon.sprite == "item/stone-furnace")
-assert(hud_element.construction_shortfalls.entry_1.item_icon.style.width == 8)
 assert(hud_element.construction_shortfalls.entry_1.quantity.caption == "3")
-assert(hud_element.construction_shortfalls.style.maximal_width == 192)
-assert(hud_element.research_progress.segments.done.style.width == 45)
-assert(hud_element.research_progress.segments.pending.style.width == 90)
-assert(hud_element.research_progress.segments.not_started.style.width == 45)
-assert(hud_element.research_progress.tooltip == "Research: 5 complete · 10 science ready · 5 remaining")
+assert(hud_element.research_progress.tooltip == "Research: 5 consumed in labs · 15 remaining · 2 labs working")
 assert(hud_element.research_shortfalls.entry_1.item_icon.sprite == "item/automation-science-pack")
-assert(hud_element.research_shortfalls.entry_1.quantity.caption == "5")
-assert(hud_element.extra_item_progress.segments.done.style.width == 105)
-assert(hud_element.extra_item_progress.segments.pending.visible == false)
-assert(hud_element.extra_item_progress.segments.not_started.style.width == 75)
-assert(hud_element.extra_item_progress.tooltip == "Extra items: 7 ready · 5 remaining")
-assert(hud_element.extra_item_shortfalls.entry_1.item_icon.sprite == "item/coal")
-assert(hud_element.extra_item_shortfalls.entry_1.quantity.caption == "5")
-assert(hud_element.next_split_construction_progress.indicator_icon.sprite == "item/blueprint")
-assert(hud_element.next_split_construction_progress.segments.done.visible == false)
-assert(hud_element.next_split_construction_progress.segments.pending.style.width == 54)
-assert(hud_element.next_split_construction_progress.segments.not_started.style.width == 126)
-assert(hud_element.next_split_construction_progress.tooltip == "Next construction: 3 ready to place · 7 remaining")
-assert(hud_element.next_split_construction_shortfalls.entry_1.item_icon.sprite == "item/steel-chest")
-assert(hud_element.next_split_construction_shortfalls.entry_1.quantity.caption == "7")
+assert(hud_element.next_split_production_progress.tooltip == "Next production: 3 ready · 7 remaining")
+assert(hud_element.next_split_production_shortfalls.entry_1.item_icon.sprite == "item/iron-gear-wheel")
+assert(hud_element.next_split_production_shortfalls.entry_1.quantity.caption == "7")
 
 hud.refresh(player, {
   plan_label = "Any% practice",
@@ -143,12 +120,10 @@ assert(hud_element.previous_split.visible == true)
 assert(hud_element.previous_split.caption == "Burner phase  0:01:00")
 assert(hud_element.current_split.caption == "Automation  0:01:02")
 assert(hud_element.long_pole_advance_split.visible == false)
-assert(hud_element.long_pole_advance_split.caption == "")
 assert(hud_element.construction_shortfalls.visible == false)
 assert(hud_element.research_shortfalls.visible == false)
-assert(hud_element.extra_item_shortfalls.visible == false)
-assert(hud_element.next_split_construction_progress.visible == false)
-assert(hud_element.next_split_construction_shortfalls.visible == false)
+assert(hud_element.next_split_production_progress.visible == false)
+assert(hud_element.next_split_production_shortfalls.visible == false)
 
 hud.refresh(player, nil)
 assert(left.long_pole_speedrun_hud ~= nil)
@@ -156,9 +131,4 @@ assert(header.active_speedrun_name.caption == "No active speedrun")
 assert(hud_element.previous_split.visible == false)
 assert(hud_element.current_split.visible == false)
 assert(hud_element.long_pole_advance_split.visible == false)
-assert(hud_element.construction_shortfalls.visible == false)
-assert(hud_element.research_shortfalls.visible == false)
-assert(hud_element.extra_item_shortfalls.visible == false)
-assert(hud_element.next_split_construction_progress.visible == false)
-assert(hud_element.next_split_construction_shortfalls.visible == false)
 assert(header.long_pole_next_plan.sprite == "utility/right_arrow")

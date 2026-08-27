@@ -402,9 +402,33 @@ function M.load_book_for_player(player, book)
   return plan, load_error
 end
 
+function M.find_library_book(player, label, preferred_index)
+  if preferred_index and preferred_index > 0 then
+    local book = player.blueprints[preferred_index]
+    if M.is_speedrun_plan_book(book) and book.label == label then
+      return book, preferred_index
+    end
+  end
+  for index = 1, #player.blueprints do
+    local book = player.blueprints[index]
+    if M.is_speedrun_plan_book(book) and (not label or book.label == label) then
+      return book, index
+    end
+  end
+  return nil
+end
+
 -- Finds the next top-level [LP] book after a blueprint-library index. Unmarked
 -- books are identified from their label only and are never opened or parsed.
-function M.load_next_library_book_for_player(player, after_index)
+-- The starting index is re-resolved by label so reordering the library cannot
+-- skip or repeat the wrong book.
+function M.load_next_library_book_for_player(player, after_index, current_label)
+  if current_label then
+    local _, resolved_index = M.find_library_book(player, current_label, after_index)
+    after_index = resolved_index or after_index or 0
+  else
+    after_index = after_index or 0
+  end
   for index = after_index + 1, #player.blueprints do
     local book = player.blueprints[index]
     if M.is_speedrun_plan_book(book) then

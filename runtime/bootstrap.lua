@@ -49,6 +49,18 @@ function M.install(script_root)
     speedrun_hud_controller.on_runtime_mod_setting_changed
   )
   script_root.on_event("long-pole-toggle-debug-window", debug_window_controller.on_toggle_debug_window)
+  script_root.on_event("long-pole-advance-split", function(event)
+    local player = game.get_player(event.player_index)
+    if player then
+      speedrun_hud_controller.advance_split(player)
+    end
+  end)
+  script_root.on_event("long-pole-rewind-split", function(event)
+    local player = game.get_player(event.player_index)
+    if player then
+      speedrun_hud_controller.rewind_split(player)
+    end
+  end)
   script_root.on_nth_tick(60, on_second_tick)
   snooper_master.install(script_root)
 end

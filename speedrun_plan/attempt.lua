@@ -12,7 +12,9 @@ function M.new(plan, library_book_index, state)
   local attempt = setmetatable({
     plan = plan,
     library_book_index = library_book_index,
-    current_split_index = 1
+    library_book_label = plan.label,
+    current_split_index = 1,
+    split_finished_ticks = {}
   }, AttemptMetatable)
   if state then
     attempt:begin_current_split(state)
@@ -44,9 +46,10 @@ end
 function AttemptMethods:mark_current_split_done(finished_tick, state)
   local current_split = self.plan:split_at(self.current_split_index)
   if not current_split then
-    return
+    return false
   end
 
+  self.split_finished_ticks[self.current_split_index] = finished_tick
   self.previous_split_index = self.current_split_index
   self.previous_split_finished_tick = finished_tick
   self.current_split_index = self.current_split_index + 1
@@ -55,6 +58,29 @@ function AttemptMethods:mark_current_split_done(finished_tick, state)
   else
     self.split_start_placed_product_counts = nil
   end
+  return true
+end
+
+function AttemptMethods:rewind_split(current_tick, state)
+  if self.current_split_index <= 1 then
+    return false
+  end
+
+  self.split_finished_ticks[self.current_split_index - 1] = nil
+  self.current_split_index = self.current_split_index - 1
+  if self.current_split_index > 1 then
+    self.previous_split_index = self.current_split_index - 1
+    self.previous_split_finished_tick = self.split_finished_ticks[self.previous_split_index]
+  else
+    self.previous_split_index = nil
+    self.previous_split_finished_tick = nil
+  end
+  if state then
+    self:begin_current_split(state)
+  else
+    self.split_start_placed_product_counts = nil
+  end
+  return true
 end
 
 function AttemptMethods:hud_view(game_tick)
