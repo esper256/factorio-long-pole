@@ -62,11 +62,13 @@ research automation
     [11] = {
       type = "deconstruction-planner",
       label = "Harvest coal rocks",
-      planner_description = [[
+      settings = {
+        description = [[
 ====== long-pole data-begin ======
 item coal 50
 ====== long-pole data-end ======
 ]]
+      }
     },
     [15] = {
       type = "upgrade-planner",

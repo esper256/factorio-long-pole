@@ -124,9 +124,25 @@ local function split_from_book(book, location, counts)
 
   return {
     label = label,
-    description = book.blueprint_description or "",
+    description = book.blueprint_description or book.description or "",
     placement_item_counts = counts
   }
+end
+
+local function planner_description_text(planner)
+  -- Item stacks use planner_description. Blueprint-library records and the
+  -- book export string put the same text on description or settings.description.
+  if type(planner.planner_description) == "string" and planner.planner_description ~= "" then
+    return planner.planner_description
+  end
+  if type(planner.description) == "string" and planner.description ~= "" then
+    return planner.description
+  end
+  local settings = planner.settings
+  if settings and type(settings.description) == "string" then
+    return settings.description
+  end
+  return planner.planner_description or ""
 end
 
 local function split_from_planner(planner, location)
@@ -137,7 +153,7 @@ local function split_from_planner(planner, location)
 
   return {
     label = label,
-    description = planner.planner_description or "",
+    description = planner_description_text(planner),
     placement_item_counts = {}
   }
 end
