@@ -3,7 +3,7 @@
 -- the row when the set of icons did not change.
 local M = {}
 
-local ICON_SIZE = 8
+local ICON_SIZE = 20
 local MAX_ENTRIES = 8
 
 function M.add(parent, name, width)
@@ -16,7 +16,7 @@ function M.add(parent, name, width)
   list.style.maximal_width = width
   list.style.margin = 0
   list.style.padding = 0
-  list.style.horizontal_spacing = 0
+  list.style.horizontal_spacing = 4
   return list
 end
 
@@ -52,7 +52,7 @@ local function add_item(list, index, entry)
   })
   pair.style.margin = 0
   pair.style.padding = 0
-  pair.style.horizontal_spacing = 0
+  pair.style.horizontal_spacing = 2
   local icon = pair.add({
     type = "sprite",
     name = "item_icon",
