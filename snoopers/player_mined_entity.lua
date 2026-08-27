@@ -1,13 +1,12 @@
 -- Entity removal: player/robot/platform mining, death, and script destroy.
 --
 -- Placeable buildings unplace the placement item.
--- Trees, rocks, fish, and crash-site wrecks harvest returned buffer items.
--- Those drops are not in production statistics.
+-- Trees, rocks, fish, and crash-site wrecks harvest returned buffer items
+-- because those drops are not on the production graph (PRODUCT.md §14).
 --
--- Ore patches ARE in production statistics. Never harvest them, even if they
--- have no placement item. A type=="resource" check is not enough if that
--- string ever differs; resource_category is the prototype flag that means
--- "this is an ore patch / oil well."
+-- Ore patches are not tracked here. Hand mining and mining drills both
+-- already increment Factorio production statistics; that graph is the only
+-- source for patch ore. Ignore resource entities entirely.
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
@@ -35,10 +34,42 @@ local WRECK_ENTITY_TYPES = {
   ["infinity-container"] = true
 }
 
+local function named_prototype(entity)
+  if prototypes and prototypes.entity and entity.name then
+    return prototypes.entity[entity.name]
+  end
+end
+
+local function entity_prototype(entity)
+  return entity.prototype or named_prototype(entity)
+end
+
+local function entity_type_name(entity)
+  local type_name = entity.type
+  if type(type_name) == "string" and type_name ~= "" then
+    return type_name
+  end
+  local proto = entity_prototype(entity)
+  return proto and proto.type
+end
+
 local function product_counts(items)
   local counts = {}
-  for _, item in ipairs(items or {}) do
-    counts[item.name] = (counts[item.name] or 0) + item.count
+  if not items then
+    return counts
+  end
+  if items[1] ~= nil then
+    for _, item in ipairs(items) do
+      if item.name then
+        counts[item.name] = (counts[item.name] or 0) + (item.count or 0)
+      end
+    end
+    return counts
+  end
+  for name, count in pairs(items) do
+    if type(name) == "string" and type(count) == "number" then
+      counts[name] = (counts[name] or 0) + count
+    end
   end
   return counts
 end
@@ -51,30 +82,36 @@ local function buffer_counts(event)
 end
 
 local function placement_item(entity)
-  local items_to_place = entity.prototype and entity.prototype.items_to_place_this
+  local proto = entity_prototype(entity)
+  local items_to_place = proto and proto.items_to_place_this
   if not items_to_place or #items_to_place == 0 then
     return nil
   end
   return items_to_place[1]
 end
 
+-- Production statistics already count this ore. Named-prototype lookup is used
+-- because a dying resource may not expose entity.type.
 local function is_ore_patch(entity)
-  if entity.type == "resource" then
+  if entity_type_name(entity) == "resource" then
     return true
   end
-  local prototype = entity.prototype
-  return prototype ~= nil and prototype.resource_category ~= nil
+  local proto = entity_prototype(entity)
+  return proto ~= nil and (proto.type == "resource" or proto.resource_category ~= nil)
 end
 
 local function is_loot_source(entity)
-  if is_ore_patch(entity) or entity.type == "entity-ghost" then
+  if is_ore_patch(entity) then
     return false
   end
-  if HARVESTED_ENTITY_TYPES[entity.type] then
+  local type_name = entity_type_name(entity)
+  if type_name == "entity-ghost" then
+    return false
+  end
+  if HARVESTED_ENTITY_TYPES[type_name] then
     return true
   end
-  -- Crash-site wrecks have no placement item and are not in production stats.
-  return WRECK_ENTITY_TYPES[entity.type] == true and placement_item(entity) == nil
+  return WRECK_ENTITY_TYPES[type_name] == true and placement_item(entity) == nil
 end
 
 local function returned_placement_item_counts(entity, returned_items)
@@ -94,7 +131,7 @@ end
 
 function M.on_event(event)
   local entity = event.entity
-  if not entity or entity.type == "entity-ghost" or is_ore_patch(entity) then
+  if not entity or entity_type_name(entity) == "entity-ghost" or is_ore_patch(entity) then
     return
   end
 

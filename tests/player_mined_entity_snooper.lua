@@ -133,6 +133,29 @@ snooper.on_event({
 })
 assert(surface.products["copper-ore"] == nil)
 
+-- Patch ore is production-statistics only. A dying resource may have no
+-- type/prototype accessors; still do not harvest it.
+prototypes = {
+  entity = {
+    ["copper-ore"] = {
+      type = "resource",
+      resource_category = "basic-solid"
+    }
+  }
+}
+snooper.on_event({
+  entity = {
+    name = "copper-ore",
+    surface = { name = "nauvis" }
+  },
+  buffer = {
+    get_contents = function()
+      error("dying resource entities must be identified by prototype name")
+    end
+  }
+})
+assert(surface.products["copper-ore"] == nil)
+
 -- A non-wreck, non-rock entity without a placement item is not a harvest source.
 snooper.on_event({
   entity = {

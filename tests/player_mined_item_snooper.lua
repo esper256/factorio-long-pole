@@ -1,4 +1,5 @@
--- Exercises one real-event-shaped input without launching Factorio.
+-- The unused on_player_mined_item snooper still accounts if invoked; it stays
+-- disabled because production statistics already include patch ore.
 storage = {}
 defines = {
   events = {

@@ -15,7 +15,7 @@ Repeated item directives add together. A description with no long-pole data bloc
 
 We can avoid having to write a GUI to edit the speedrun plan as late as possible and instead have just a template that you copy and paste into the description with a bunch of commented out lines that show you what the format of the different parameters are and how they are specified.
 
-The blueprint already specifies what placement items are needed to build it. Extra `item` lines are more items to **have** for that split (map-seed belts, coal before smelting, etc.). Put them on the split that needs them, typically the one you are producing toward while placing the previous print. They are not a separate harvesting HUD. `research` names technologies whose lab consumption belongs to that split.
+The blueprint already specifies what placement items are needed to build it. Extra `item` lines are more items to **have** for that split (map-seed belts, coal before smelting, etc.). Put them on the split that needs them, typically the one you are producing toward while placing the previous print. They are not a separate harvesting HUD. Patch ore (hand or miners) is read from production statistics, not from mining events. `research` names technologies whose lab consumption belongs to that split.
 
 For storage of things such as personal bests. We can have a singleton blueprint with a fake entity inside that we set tags on. And when you finish a run you can press a quick action that updates the data, regenerates a new blueprint that the user is expected to put in their My Library book and delete the old one. This is a hack but there's not a better way.
 
