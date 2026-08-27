@@ -123,3 +123,19 @@ assert(first_library_book_index == 2)
 local no_plan = loader.load_next_library_book_for_player(player, 2)
 assert(no_plan == nil)
 assert(printed_messages[1] == "[Long Pole] No later [LP] blueprint book was found in your library.")
+
+-- Library identity is the [LP] label, not a stored index. A stale preferred
+-- index must not load the wrong book after the library is reordered.
+local reordered_player = {
+  blueprints = {
+    record_book,
+    {
+      type = "blueprint-book",
+      label = "Wrong [LP]",
+      contents = {}
+    }
+  }
+}
+local found_book, found_index = loader.find_library_book(reordered_player, "Library plan [LP]", 2)
+assert(found_book == record_book)
+assert(found_index == 1)

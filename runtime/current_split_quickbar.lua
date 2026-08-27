@@ -1,6 +1,8 @@
 -- Keeps the visible quickbar pointed at the active split's source page.
 -- Plans retain only the source page number; this module resolves the live
 -- blueprint-library record at the instant Factorio needs it.
+local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
+
 local M = {}
 
 local function source_page_index(book, attempt, split)
@@ -25,7 +27,14 @@ local function current_split_record(player, attempt)
     return nil
   end
 
-  local book = player.blueprints[attempt.library_book_index]
+  local book, resolved_index = blueprint_book_plan_loader.find_library_book(
+    player,
+    attempt.library_book_label or attempt.plan.label,
+    attempt.library_book_index
+  )
+  if resolved_index then
+    attempt.library_book_index = resolved_index
+  end
   if not book or book.type ~= "blueprint-book" then
     return nil
   end

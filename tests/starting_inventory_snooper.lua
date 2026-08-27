@@ -7,7 +7,7 @@ game = {
 local snooper = require("snoopers.starting_inventory")
 snooper.on_init()
 
-local products = storage.long_pole.debug_game_state.surfaces.nauvis.products
+local products = storage.long_pole.ledger.surfaces.nauvis.products
 assert(products.wood.harvested == 1)
 assert(products["stone-furnace"].harvested == 1)
 assert(products["burner-mining-drill"].harvested == 1)

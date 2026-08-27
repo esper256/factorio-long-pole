@@ -1,0 +1,26 @@
+name: Lua tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lua:
+    name: standalone lua tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+      - name: Run tests
+        run: |
+          export LUA_PATH="./?.lua;./?/init.lua;;"
+          failed=0
+          for test in tests/*.lua; do
+            echo "== ${test}"
+            if ! lua5.4 "${test}"; then
+              failed=1
+            fi
+          done
+          exit "${failed}"

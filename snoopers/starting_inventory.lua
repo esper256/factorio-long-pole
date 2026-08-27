@@ -11,7 +11,7 @@ function M.on_init()
   end
 
   local runtime_state = long_pole_runtime_state.get()
-  local nauvis = game_state.surface(runtime_state.debug_game_state, "nauvis")
+  local nauvis = game_state.surface(runtime_state.ledger, "nauvis")
   nauvis:record_products_harvested({
     ["wood"] = 1,
     ["stone-furnace"] = 1,

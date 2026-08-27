@@ -19,7 +19,9 @@ local plan = speedrun_plan.new("Practice [LP]", {
       rail = 4,
       ["transport-belt"] = 2
     },
-    extra_item_counts = {},
+    extra_item_counts = {
+      coal = 50
+    },
     research_technologies = {}
   }
 })
@@ -28,9 +30,13 @@ local nauvis = game_state.surface(state, "nauvis")
 nauvis:record_products_produced({
   ["stone-furnace"] = 8,
   rail = 5,
-  ["transport-belt"] = 1
+  ["transport-belt"] = 1,
+  coal = 10
 })
 nauvis:record_products_placed({ ["stone-furnace"] = 1 })
+
+assert(plan:split_at(2):production_item_count("coal") == 50)
+assert(plan:split_at(2):production_item_count("stone-furnace") == 5)
 
 local progress = next_split_construction_progress.for_splits(
   plan:split_at(1),
@@ -39,11 +45,9 @@ local progress = next_split_construction_progress.for_splits(
   { ["stone-furnace"] = 0, rail = 0 }
 )
 
-assert(progress.total == 11)
+assert(progress.total == 61)
 assert(progress.done == 0)
-assert(progress.pending == 7)
-assert(progress.tooltip == "Next construction: 7 ready to place · 4 remaining")
-assert(progress.unfinished_items[1].item_name == "rail")
-assert(progress.unfinished_items[1].count == 2)
-assert(progress.unfinished_items[2].item_name == "stone-furnace")
-assert(progress.unfinished_items[2].count == 1)
+assert(progress.pending == 17)
+assert(progress.tooltip == "Next production: 17 ready · 44 remaining")
+assert(progress.unfinished_items[1].item_name == "coal")
+assert(progress.unfinished_items[1].count == 40)

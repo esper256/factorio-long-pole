@@ -7,7 +7,7 @@ local M = {}
 
 local function refresh_player_debug_panel(player)
   local runtime_state = long_pole_runtime_state.get()
-  debug_state_panel.refresh(player, runtime_state.debug_game_state)
+  debug_state_panel.refresh(player, runtime_state.ledger)
 end
 
 function M.on_init()
@@ -38,7 +38,7 @@ end
 
 function M.on_toggle_debug_window(event)
   local runtime_state = long_pole_runtime_state.get()
-  debug_state_panel.toggle(game.get_player(event.player_index), runtime_state.debug_game_state)
+  debug_state_panel.toggle(game.get_player(event.player_index), runtime_state.ledger)
 end
 
 return M

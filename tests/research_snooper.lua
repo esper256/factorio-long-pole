@@ -1,5 +1,5 @@
--- Research progress is force-level state. The active technology uses the
--- force's live progress; inactive technologies retain their saved progress.
+-- The research snooper copies only the live current technology and lab count.
+-- It does not walk every technology prototype.
 storage = {}
 game = {
   forces = {
@@ -8,36 +8,23 @@ game = {
         name = "automation"
       },
       research_progress = 0.4,
-      technologies = {
-        automation = {
-          researched = false,
-          saved_progress = 0.1
-        },
-        logistics = {
-          researched = false,
-          saved_progress = 0.25
-        },
-        ["steel-processing"] = {
-          researched = true,
-          saved_progress = 0
-        }
-      }
+      technologies = {}
     }
-  }
+  },
+  surfaces = {}
 }
 
 local snooper = require("snoopers.research")
 snooper.on_init()
 
-local research = storage.long_pole.debug_game_state.research
-assert(research.automation.researched == false)
-assert(research.automation.progress == 0.4)
-assert(research.logistics.researched == false)
-assert(research.logistics.progress == 0.25)
-assert(research["steel-processing"].researched == true)
-assert(research["steel-processing"].progress == 1)
+local ledger = storage.long_pole.ledger
+assert(ledger.research.automation.researched == false)
+assert(ledger.research.automation.progress == 0.4)
+assert(ledger.research.logistics == nil)
+assert(ledger.lab_working_count == 0)
 
-game.forces.player.current_research = nil
-game.forces.player.technologies.automation.saved_progress = 0.6
-snooper.on_second_tick({})
-assert(research.automation.progress == 0.6)
+snooper.on_event({
+  research = { name = "logistics" }
+})
+assert(ledger.research.logistics.researched == true)
+assert(ledger.research.logistics.progress == 1)

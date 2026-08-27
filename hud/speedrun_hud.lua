@@ -14,12 +14,10 @@ local ADVANCE_SPLIT_BUTTON_NAME = "long_pole_advance_split"
 local NEXT_PLAN_BUTTON_NAME = "long_pole_next_plan"
 local CONSTRUCTION_PROGRESS_NAME = "construction_progress"
 local RESEARCH_PROGRESS_NAME = "research_progress"
-local EXTRA_ITEM_PROGRESS_NAME = "extra_item_progress"
 local CONSTRUCTION_SHORTFALLS_NAME = "construction_shortfalls"
 local RESEARCH_SHORTFALLS_NAME = "research_shortfalls"
-local EXTRA_ITEM_SHORTFALLS_NAME = "extra_item_shortfalls"
-local NEXT_SPLIT_CONSTRUCTION_PROGRESS_NAME = "next_split_construction_progress"
-local NEXT_SPLIT_CONSTRUCTION_SHORTFALLS_NAME = "next_split_construction_shortfalls"
+local NEXT_SPLIT_PRODUCTION_PROGRESS_NAME = "next_split_production_progress"
+local NEXT_SPLIT_PRODUCTION_SHORTFALLS_NAME = "next_split_production_shortfalls"
 local HUD_WIDTH = 192
 local function sprite_or_fallback(preferred, fallback)
   if helpers and helpers.is_valid_sprite_path(preferred) then
@@ -30,7 +28,6 @@ end
 
 local CONSTRUCTION_ICON = sprite_or_fallback("virtual-signal/signal-blueprint", "item/blueprint")
 local RESEARCH_ICON = sprite_or_fallback("virtual-signal/signal-science-pack", "utility/technology_white")
-local HARVESTING_ICON = sprite_or_fallback("virtual-signal/signal-axe", "utility/hand")
 local NEXT_SPLIT_COLOR = { r = 0.82, g = 0.82, b = 0.82 }
 local NEXT_SPLIT_HOVER_COLOR = { r = 1, g = 1, b = 1 }
 
@@ -81,8 +78,6 @@ local function build(player)
   icon_quantity_list.add(hud, CONSTRUCTION_SHORTFALLS_NAME, HUD_WIDTH)
   tri_color_progress_bar.add(hud, RESEARCH_PROGRESS_NAME, HUD_WIDTH, RESEARCH_ICON)
   icon_quantity_list.add(hud, RESEARCH_SHORTFALLS_NAME, HUD_WIDTH)
-  tri_color_progress_bar.add(hud, EXTRA_ITEM_PROGRESS_NAME, HUD_WIDTH, HARVESTING_ICON)
-  icon_quantity_list.add(hud, EXTRA_ITEM_SHORTFALLS_NAME, HUD_WIDTH)
   hud.add({
     type = "button",
     name = ADVANCE_SPLIT_BUTTON_NAME,
@@ -92,8 +87,8 @@ local function build(player)
   hud[ADVANCE_SPLIT_BUTTON_NAME].style.font_color = NEXT_SPLIT_COLOR
   hud[ADVANCE_SPLIT_BUTTON_NAME].style.hovered_font_color = NEXT_SPLIT_HOVER_COLOR
   hud[ADVANCE_SPLIT_BUTTON_NAME].style.clicked_font_color = NEXT_SPLIT_HOVER_COLOR
-  tri_color_progress_bar.add(hud, NEXT_SPLIT_CONSTRUCTION_PROGRESS_NAME, HUD_WIDTH, CONSTRUCTION_ICON)
-  icon_quantity_list.add(hud, NEXT_SPLIT_CONSTRUCTION_SHORTFALLS_NAME, HUD_WIDTH)
+  tri_color_progress_bar.add(hud, NEXT_SPLIT_PRODUCTION_PROGRESS_NAME, HUD_WIDTH, CONSTRUCTION_ICON)
+  icon_quantity_list.add(hud, NEXT_SPLIT_PRODUCTION_SHORTFALLS_NAME, HUD_WIDTH)
 
   return hud
 end
@@ -129,13 +124,11 @@ function M.refresh(player, view)
   local current = hud[CURRENT_NAME]
   local construction = hud[CONSTRUCTION_PROGRESS_NAME]
   local research = hud[RESEARCH_PROGRESS_NAME]
-  local extra_items = hud[EXTRA_ITEM_PROGRESS_NAME]
   local construction_shortfalls = hud[CONSTRUCTION_SHORTFALLS_NAME]
   local research_shortfalls = hud[RESEARCH_SHORTFALLS_NAME]
-  local extra_item_shortfalls = hud[EXTRA_ITEM_SHORTFALLS_NAME]
   local advance_split_button = hud[ADVANCE_SPLIT_BUTTON_NAME]
-  local next_split_construction = hud[NEXT_SPLIT_CONSTRUCTION_PROGRESS_NAME]
-  local next_split_construction_shortfalls = hud[NEXT_SPLIT_CONSTRUCTION_SHORTFALLS_NAME]
+  local next_split_production = hud[NEXT_SPLIT_PRODUCTION_PROGRESS_NAME]
+  local next_split_production_shortfalls = hud[NEXT_SPLIT_PRODUCTION_SHORTFALLS_NAME]
 
   if not view then
     plan_name.caption = "No active speedrun"
@@ -143,13 +136,11 @@ function M.refresh(player, view)
     current.visible = false
     construction.visible = false
     research.visible = false
-    extra_items.visible = false
     construction_shortfalls.visible = false
     research_shortfalls.visible = false
-    extra_item_shortfalls.visible = false
     advance_split_button.visible = false
-    next_split_construction.visible = false
-    next_split_construction_shortfalls.visible = false
+    next_split_production.visible = false
+    next_split_production_shortfalls.visible = false
     return
   end
 
@@ -179,24 +170,17 @@ function M.refresh(player, view)
     research.visible = false
     research_shortfalls.visible = false
   end
-  if view.extra_item_progress then
-    tri_color_progress_bar.refresh(extra_items, view.extra_item_progress)
-    icon_quantity_list.refresh(extra_item_shortfalls, view.extra_item_progress.unfinished_items)
-  else
-    extra_items.visible = false
-    extra_item_shortfalls.visible = false
-  end
   advance_split_button.visible = view.next_split_label ~= nil
   advance_split_button.caption = view.next_split_label or ""
-  if view.next_split_construction_progress then
-    tri_color_progress_bar.refresh(next_split_construction, view.next_split_construction_progress)
+  if view.next_split_production_progress then
+    tri_color_progress_bar.refresh(next_split_production, view.next_split_production_progress)
     icon_quantity_list.refresh(
-      next_split_construction_shortfalls,
-      view.next_split_construction_progress.unfinished_items
+      next_split_production_shortfalls,
+      view.next_split_production_progress.unfinished_items
     )
   else
-    next_split_construction.visible = false
-    next_split_construction_shortfalls.visible = false
+    next_split_production.visible = false
+    next_split_production_shortfalls.visible = false
   end
 end
 

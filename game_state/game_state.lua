@@ -55,7 +55,9 @@ local function product_entry(state, surface_name, product_name)
     harvested = 0,
     consumed = 0,
     placed = 0,
-    destroyed = 0
+    destroyed = 0,
+    produced_per_minute = 0,
+    consumed_per_minute = 0
   }
   products[product_name] = entry
   return entry
@@ -102,8 +104,9 @@ local function subtract_product_counts(state, surface_name, field_name, counts_b
   for product_name, count in pairs(counts_by_name) do
     assert(count >= 0, product_name .. " must be non-negative")
     local entry = product_entry(state, surface_name, product_name)
-    assert(entry[field_name] >= count, product_name .. " " .. field_name .. " must not become negative")
-    entry[field_name] = entry[field_name] - count
+    -- Mining wrecks, map-editor ghosts, or missed build events can unplace more
+    -- than we recorded. Clamp instead of asserting so a practice save cannot die.
+    entry[field_name] = math.max(0, entry[field_name] - count)
   end
 end
 
@@ -140,8 +143,7 @@ local function subtract_placed_entity_counts(state, surface_name, field_name, co
   for entity_name, count in pairs(counts_by_name) do
     assert(count >= 0, entity_name .. " must be non-negative")
     local entry = placed_entity_entry(state, surface_name, entity_name)
-    assert(entry[field_name] >= count, entity_name .. " " .. field_name .. " must not become negative")
-    entry[field_name] = entry[field_name] - count
+    entry[field_name] = math.max(0, entry[field_name] - count)
   end
 end
 
@@ -160,7 +162,8 @@ function M.new(clock_tick)
       tick = clock_tick or 0
     },
     surfaces = {},
-    research = {}
+    research = {},
+    lab_working_count = 0
   }
 end
 
@@ -201,7 +204,10 @@ function M.total_products_produced(product)
 end
 
 function M.loose_stock(product)
-  return M.total_products_produced(product) - (product.consumed or 0) - (product.placed or 0) - (product.destroyed or 0)
+  return math.max(
+    0,
+    M.total_products_produced(product) - (product.consumed or 0) - (product.placed or 0) - (product.destroyed or 0)
+  )
 end
 
 -- Aggregate queries intentionally return numbers, not cached views. The HUD
@@ -215,7 +221,7 @@ function M.total_loose_stock(state, product_name)
       total = total + M.loose_stock(product)
     end
   end
-  return total
+  return math.max(0, total)
 end
 
 function M.total_placed_products(state, product_name)
@@ -242,6 +248,38 @@ end
 function M.reconcile_product_statistics(state, surface_name, produced_counts, consumed_counts)
   reconcile_product_counts(state, surface_name, "produced", produced_counts)
   reconcile_product_counts(state, surface_name, "consumed", consumed_counts)
+end
+
+function M.reconcile_product_flow_rates(state, surface_name, produced_rates, consumed_rates)
+  reconcile_product_counts(state, surface_name, "produced_per_minute", produced_rates)
+  reconcile_product_counts(state, surface_name, "consumed_per_minute", consumed_rates)
+end
+
+function M.total_produced_per_minute(state, product_name)
+  local total = 0
+  for _, surface in pairs(state.surfaces) do
+    local product = surface.products[product_name]
+    if product then
+      total = total + (product.produced_per_minute or 0)
+    end
+  end
+  return total
+end
+
+function M.total_consumed_per_minute(state, product_name)
+  local total = 0
+  for _, surface in pairs(state.surfaces) do
+    local product = surface.products[product_name]
+    if product then
+      total = total + (product.consumed_per_minute or 0)
+    end
+  end
+  return total
+end
+
+function M.set_lab_throughput(state, working_count)
+  assert(working_count >= 0, "working_count must be non-negative")
+  state.lab_working_count = working_count
 end
 
 -- Deterministic iteration helpers are for test/debug output only.

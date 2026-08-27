@@ -14,23 +14,23 @@ local plan = speedrun_plan.new("Practice [LP]", {
   }
 })
 local state = game_state.new()
-local nauvis = game_state.surface(state, "nauvis")
-nauvis:record_products_produced({
-  ["automation-science-pack"] = 3,
-  ["logistic-science-pack"] = 5
-})
-game_state.set_research(state, "automation", false, 0.5)
-game_state.set_research(state, "logistics", true)
+game_state.set_lab_throughput(state, 2)
 
 local force = {
+  current_research = { name = "automation" },
+  research_progress = 0.5,
   technologies = {
     automation = {
+      researched = false,
+      saved_progress = 0.1,
       research_unit_count = 10,
       research_unit_ingredients = {
         { name = "automation-science-pack", amount = 1 }
       }
     },
     logistics = {
+      researched = true,
+      saved_progress = 0,
       research_unit_count = 10,
       research_unit_ingredients = {
         { name = "automation-science-pack", amount = 1 },
@@ -43,13 +43,14 @@ local force = {
 local progress = research_progress.for_split(plan:split_at(1), state, force)
 assert(progress.total == 30)
 assert(progress.done == 25)
-assert(progress.pending == 3)
-assert(progress.tooltip == "Research: 25 complete · 3 science ready · 2 remaining")
+assert(progress.pending == 0)
+assert(progress.working_labs == 2)
 assert(progress.unfinished_items[1].item_name == "automation-science-pack")
-assert(progress.unfinished_items[1].count == 2)
+assert(progress.unfinished_items[1].count == 5)
+assert(progress.tooltip == "Research: 25 consumed in labs · 5 remaining · 2 labs working")
 
-game_state.set_research(state, "automation", false, 0.91)
+force.research_progress = 0.91
 local in_flight_progress = research_progress.for_split(plan:split_at(1), state, force)
 assert(in_flight_progress.done == 29.1)
-assert(math.abs(in_flight_progress.pending - 0.9) < 0.000001)
-assert(#in_flight_progress.unfinished_items == 0)
+assert(#in_flight_progress.unfinished_items == 1)
+assert(math.abs(in_flight_progress.unfinished_items[1].count - 0.9) < 0.000001)

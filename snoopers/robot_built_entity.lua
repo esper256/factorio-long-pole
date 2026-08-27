@@ -15,7 +15,7 @@ function M.on_event(event)
   end
 
   local runtime_state = long_pole_runtime_state.get()
-  local surface = game_state.surface(runtime_state.debug_game_state, event.entity.surface.name)
+  local surface = game_state.surface(runtime_state.ledger, event.entity.surface.name)
 
   surface:record_placed_entities({
     [event.entity.name] = 1

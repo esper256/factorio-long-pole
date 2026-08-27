@@ -15,6 +15,6 @@ snooper.on_event({
   }
 })
 
-local surface = storage.long_pole.debug_game_state.surfaces.nauvis
+local surface = storage.long_pole.ledger.surfaces.nauvis
 assert(surface.placed_entities["stone-furnace"].placed == 1)
 assert(surface.products["stone-furnace"].placed == 1)

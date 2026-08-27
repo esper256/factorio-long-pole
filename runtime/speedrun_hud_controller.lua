@@ -4,7 +4,6 @@ local speedrun_attempts = require("runtime_state.speedrun_attempts")
 local blueprint_book_plan_loader = require("storage.blueprint_book_plan_loader")
 local construction_progress = require("progress_analysis.construction_progress")
 local next_split_construction_progress = require("progress_analysis.next_split_construction_progress")
-local extra_item_progress = require("progress_analysis.extra_item_progress")
 local research_progress = require("progress_analysis.research_progress")
 local split_completion = require("progress_analysis.split_completion")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
@@ -26,7 +25,7 @@ local function start_attempt(player, plan, library_book_index)
     player.index,
     plan,
     library_book_index,
-    long_pole_runtime_state.get().debug_game_state
+    long_pole_runtime_state.ledger()
   )
   if current_split_quickbar_enabled(player) then
     current_split_quickbar.update(player, attempt)
@@ -35,7 +34,14 @@ local function start_attempt(player, plan, library_book_index)
 end
 
 local function advance_attempt(player, attempt)
-  attempt:mark_current_split_done(game.tick, long_pole_runtime_state.get().debug_game_state)
+  attempt:mark_current_split_done(game.tick, long_pole_runtime_state.ledger())
+  if current_split_quickbar_enabled(player) then
+    current_split_quickbar.update(player, attempt)
+  end
+end
+
+local function rewind_attempt(player, attempt)
+  attempt:rewind_split(game.tick, long_pole_runtime_state.ledger())
   if current_split_quickbar_enabled(player) then
     current_split_quickbar.update(player, attempt)
   end
@@ -57,8 +63,6 @@ local function auto_load_first_plan(player)
   if plan then
     start_attempt(player, plan, library_book_index)
   elseif load_error then
-    -- A malformed marked book has already printed its actionable error. Do not
-    -- repeat it every second; a reload or setting change retries the library.
     auto_load_errors_by_player[player.index] = load_error
   end
 end
@@ -74,13 +78,13 @@ local function view_for_attempt(attempt, state)
       attempt.split_start_placed_product_counts
     )
     view.research_progress = research_progress.for_split(split, state, game.forces.player)
-    view.extra_item_progress = extra_item_progress.for_split(split, state)
 
     local next_split = attempt.plan:split_at(attempt.current_split_index + 1)
-    if next_split and #next_split.placement_item_names > 0 then
-      view.next_split_construction_progress = next_split_construction_progress.for_splits(
+    local production_split = next_split
+    if production_split and #production_split.production_item_names > 0 then
+      view.next_split_production_progress = next_split_construction_progress.for_splits(
         split,
-        next_split,
+        production_split,
         state,
         attempt.split_start_placed_product_counts
       )
@@ -101,14 +105,13 @@ local function refresh(player)
     return
   end
 
-  local state = long_pole_runtime_state.get().debug_game_state
+  local state = long_pole_runtime_state.ledger()
   local view = view_for_attempt(attempt, state)
   if auto_advance_enabled(player)
     and view.next_split_label ~= nil
     and split_completion.is_complete({
       view.construction_progress,
-      view.research_progress,
-      view.extra_item_progress
+      view.research_progress
     }) then
     advance_attempt(player, attempt)
     view = view_for_attempt(attempt, state)
@@ -144,9 +147,6 @@ end
 
 function M.on_second_tick(_event)
   for _, player in pairs(game.players) do
-    -- Player blueprint records may become available after the player lifecycle
-    -- callbacks. Retrying here is safe: active attempts return immediately,
-    -- and unmarked library books are inspected by label only.
     auto_load_first_plan(player)
     refresh(player)
   end
@@ -174,7 +174,6 @@ function M.on_runtime_mod_setting_changed(event)
   end
 end
 
--- Step 9 will use this same entry point for automatic first-plan loading.
 function M.load_library_plan(player, library_book_index)
   local book = player.blueprints[library_book_index]
   local plan, load_error = blueprint_book_plan_loader.load_book_for_player(player, book)
@@ -187,6 +186,22 @@ function M.load_library_plan(player, library_book_index)
   return plan
 end
 
+function M.advance_split(player)
+  local attempt = speedrun_attempts.get(player.index)
+  if attempt then
+    advance_attempt(player, attempt)
+    refresh(player)
+  end
+end
+
+function M.rewind_split(player)
+  local attempt = speedrun_attempts.get(player.index)
+  if attempt then
+    rewind_attempt(player, attempt)
+    refresh(player)
+  end
+end
+
 function M.on_gui_click(event)
   if not event.element.valid then
     return
@@ -194,11 +209,7 @@ function M.on_gui_click(event)
 
   local player = game.get_player(event.player_index)
   if event.element.name == speedrun_hud.advance_split_button_name() then
-    local attempt = speedrun_attempts.get(player.index)
-    if attempt then
-      advance_attempt(player, attempt)
-      refresh(player)
-    end
+    M.advance_split(player)
     return
   end
   if event.element.name ~= speedrun_hud.next_plan_button_name() then
@@ -207,7 +218,12 @@ function M.on_gui_click(event)
 
   local attempt = speedrun_attempts.get(player.index)
   local after_index = attempt and attempt.library_book_index or 0
-  local plan, library_book_index = blueprint_book_plan_loader.load_next_library_book_for_player(player, after_index)
+  local current_label = attempt and (attempt.library_book_label or attempt.plan.label) or nil
+  local plan, library_book_index = blueprint_book_plan_loader.load_next_library_book_for_player(
+    player,
+    after_index,
+    current_label
+  )
   if not plan then
     return
   end

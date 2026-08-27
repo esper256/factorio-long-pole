@@ -1,57 +1,83 @@
--- Reconciles item production and consumption from Factorio's authoritative
--- per-force, per-surface production statistics.
+-- Reconciles item and fluid production from Factorio's per-force, per-surface
+-- statistics. Trees/rocks/wreck loot are not in these graphs; harvested counts
+-- stay on the ledger from entity-removal snoopers.
 --
--- The ledger is currently quality-agnostic, so every quality of an item is
--- summed into that item's single counter. Quality-aware accounting can replace
--- this aggregation when the domain model gains a quality dimension.
+-- Quality is summed: vanilla play does not split the ledger by quality yet.
+-- Totals use the already-summed input_counts / output_counts so current-tick
+-- samples are not double-counted after Factorio merges them.
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
 local M = {}
 
-local function counts_by_item_name(quality_counts)
-  local counts = {}
+local function flow_rates(statistics, category, names)
+  local rates = {}
+  if not statistics.get_flow_count then
+    return rates
+  end
+  local precision = defines.flow_precision_index.one_minute
+  for name in pairs(names) do
+    rates[name] = statistics.get_flow_count({
+      name = name,
+      category = category,
+      precision_index = precision
+    }) or 0
+  end
+  return rates
+end
 
-  for _, counts_for_quality in pairs(quality_counts) do
-    for item_name, count in pairs(counts_for_quality) do
-      counts[item_name] = (counts[item_name] or 0) + count
+local function union_keys(...)
+  local names = {}
+  for index = 1, select("#", ...) do
+    for name in pairs(select(index, ...) or {}) do
+      names[name] = true
     end
   end
-
-  return counts
+  return names
 end
 
-local function add_counts(target, additions)
-  for item_name, count in pairs(additions) do
-    target[item_name] = (target[item_name] or 0) + count
+local function merge_counts(into, source)
+  for name, count in pairs(source or {}) do
+    into[name] = count
   end
 end
 
-local function complete_counts(total_quality_counts, current_sample_quality_counts)
-  local counts = counts_by_item_name(total_quality_counts)
-
-  -- Factorio merges current samples into total counts at the end of a tick.
-  -- Including them makes this snapshot correct on either side of that merge.
-  add_counts(counts, counts_by_item_name(current_sample_quality_counts))
-  return counts
+local function merge_rates(into, statistics, category, names)
+  for name, rate in pairs(flow_rates(statistics, category, names)) do
+    into[name] = rate
+  end
 end
 
+-- Item and fluid graphs are separate Factorio objects but one ledger surface.
+-- Reconcile them as a single snapshot so applying fluids cannot zero items.
 function M.on_second_tick(_event)
-  local runtime_state = long_pole_runtime_state.get()
   local force = game.forces.player
 
   for _, surface in pairs(game.surfaces) do
-    local statistics = force.get_item_production_statistics(surface)
-    local produced_counts = complete_counts(
-      statistics.input_quality_counts,
-      statistics.current_input_quality_samples
-    )
-    game_state.reconcile_product_statistics(
-      runtime_state.debug_game_state,
-      surface.name,
-      produced_counts,
-      complete_counts(statistics.output_quality_counts, statistics.current_output_quality_samples)
-    )
+    local produced = {}
+    local consumed = {}
+    local produced_rates = {}
+    local consumed_rates = {}
+
+    local item_statistics = force.get_item_production_statistics(surface)
+    merge_counts(produced, item_statistics.input_counts)
+    merge_counts(consumed, item_statistics.output_counts)
+    local item_names = union_keys(item_statistics.input_counts, item_statistics.output_counts)
+    merge_rates(produced_rates, item_statistics, "input", item_names)
+    merge_rates(consumed_rates, item_statistics, "output", item_names)
+
+    if force.get_fluid_production_statistics then
+      local fluid_statistics = force.get_fluid_production_statistics(surface)
+      merge_counts(produced, fluid_statistics.input_counts)
+      merge_counts(consumed, fluid_statistics.output_counts)
+      local fluid_names = union_keys(fluid_statistics.input_counts, fluid_statistics.output_counts)
+      merge_rates(produced_rates, fluid_statistics, "input", fluid_names)
+      merge_rates(consumed_rates, fluid_statistics, "output", fluid_names)
+    end
+
+    local ledger = long_pole_runtime_state.ledger()
+    game_state.reconcile_product_statistics(ledger, surface.name, produced, consumed)
+    game_state.reconcile_product_flow_rates(ledger, surface.name, produced_rates, consumed_rates)
   end
 end
 

@@ -17,6 +17,7 @@ local player = {
   blueprints = {
     [2] = {
       type = "blueprint-book",
+      label = "Practice [LP]",
       contents = {
         [4] = { type = "blueprint", label = "First" }
       }

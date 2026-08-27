@@ -28,9 +28,9 @@ Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**
 
 **10. Placement matching.** Assume the player is building the linked blueprint. Count by item/entity type. Do not attempt layout, ghost, tile, module, or recipe-on-entity matching.
 
-**11. Production vs placement.** **Production and loose stock are the real progress data.** Placed entities are a bonus signal. If placement claims drift, the player advances (or goes back) manually to clear mismatched state.
+**11. Production vs placement.** During a split the player **places** the current blueprint. The factory (and handcrafting) should be **making** the next split’s placement items. Production and loose stock are the real signal for that next-split work. Placed entities on the current print are a bonus / confirmation signal. If placement claims drift, the player advances or rewinds manually.
 
-**12. Extra Stock vs next-split readiness.** Extra Stock **adds** to the current split’s blueprint demand. 10 belts in the print + 10 extra = 20 belts. Extras cover **map-seed-dependent** bits that cannot be blueprinted exactly (e.g. belts from a random ore patch to the smelters). They are **not** “prepare for the next split.” Next-split readiness is computed from **the next split’s own blueprints** (and that split’s extras). Do not overload Extra Stock with that job.
+**12. Extra Stock.** Put extras on the split that will **need** them, usually the next one. They add to that split’s production demand alongside its blueprint (`10` belts in the print + `10` extra = `20` belts to have). They cover map-seed-dependent bits that cannot be blueprinted exactly. There is **no** separate harvesting goal or extra-item HUD bar. Coal to mine before the smelter split is `item coal 500` on the smelter split, not a harvest mini-game on the current one.
 
 **14. Loose stock.** Heuristic is acceptable. Loose stock is everything **produced, mined, harvested, or started with** that has not been **placed, consumed, spoiled, or destroyed**. Do not chase a perfect world inventory census.
 
@@ -58,5 +58,6 @@ Example: next split needs 1000 belts. Plates exist, gears do not. Show **gears**
 
 - Co-op / per-player plans / per-force UX beyond “don’t crash if a second player exists.”
 - Perfect loose-stock reconciliation scans.
-- Treating Extra Stock as a proxy for the next split.
+- A separate harvesting / extra-item HUD bar.
+- Treating Extra Stock as demand on the *current* print. Extras belong on the split that needs the items (typically the next one).
 - Baking a single oil/recycling/Kovarex recipe policy into requirement expansion.

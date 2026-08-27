@@ -20,16 +20,19 @@ item coal 500
 ====== long-pole data-end ======
 ```
 
+Put extra items on the split that **needs** them, usually the next one. While placing the current print, the factory should be making the next print plus that next split's extras. There is no separate harvesting HUD. Coal before a smelter print is `item coal 500` on the smelter split.
+
 The first `[LP]` book in the **player** blueprint library auto-loads on a new run unless that setting is off.
+
+Advance with **Shift+Period**, rewind with **Shift+Comma**. Navigation is never gated on predicted completion.
 
 ## Tests
 
 Logic tests do not need Factorio. From the repo root, with Lua 5.2 or 5.4:
 
 ```bash
-lua tests/blueprint_book_plan_loader.lua
-lua tests/construction_progress.lua
-lua tests/split_completion.lua
+export LUA_PATH="./?.lua;./?/init.lua;;"
+for test in tests/*.lua; do lua "$test" || exit 1; done
 ```
 
 Each file under `tests/` is a standalone script.

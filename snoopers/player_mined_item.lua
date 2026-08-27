@@ -15,7 +15,7 @@ M.event_names = {
 function M.on_event(event)
   local player = game.get_player(event.player_index)
   local runtime_state = long_pole_runtime_state.get()
-  local surface = game_state.surface(runtime_state.debug_game_state, player.surface.name)
+  local surface = game_state.surface(runtime_state.ledger, player.surface.name)
 
   surface:record_products_produced({
     [event.item_stack.name] = event.item_stack.count

@@ -1,6 +1,8 @@
 -- Decides whether the current split's analyzed requirements permit advancing.
 -- It deliberately consumes progress facts rather than HUD elements, so the
 -- same rule can later serve a hotkey or another presentation.
+-- Callers choose which bars count. Auto-advance uses current placement and
+-- research only; next-split production must not gate navigation.
 local M = {}
 
 function M.is_complete(progress_bars)

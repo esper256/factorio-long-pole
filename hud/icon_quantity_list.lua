@@ -1,4 +1,6 @@
 -- Compact horizontal item icon and quantity pairs for unfinished requirements.
+-- Updates existing children in place so the 1-second pulse does not rebuild
+-- the row when the set of icons did not change.
 local M = {}
 
 local ICON_SIZE = 8
@@ -66,15 +68,35 @@ local function add_item(list, index, entry)
   quantity.style.font = "default-small"
 end
 
+local function update_item(pair, entry)
+  local display_count = compact_count(entry.count)
+  pair.tooltip = entry.item_name .. ": " .. display_count
+  pair.item_icon.sprite = "item/" .. entry.item_name
+  pair.quantity.caption = tostring(display_count)
+end
+
 function M.refresh(list, entries)
-  list.clear()
-  if not entries or #entries == 0 then
+  entries = entries or {}
+  local shown = math.min(#entries, MAX_ENTRIES)
+  if shown == 0 then
+    list.clear()
     list.visible = false
     return
   end
 
-  for index = 1, math.min(#entries, MAX_ENTRIES) do
-    add_item(list, index, entries[index])
+  local index = 1
+  while list["entry_" .. index] and index <= shown do
+    update_item(list["entry_" .. index], entries[index])
+    index = index + 1
+  end
+  while list["entry_" .. index] do
+    list["entry_" .. index].destroy()
+    index = index + 1
+  end
+  for add_index = 1, shown do
+    if not list["entry_" .. add_index] then
+      add_item(list, add_index, entries[add_index])
+    end
   end
   list.visible = true
 end
