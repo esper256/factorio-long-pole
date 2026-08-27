@@ -1,4 +1,5 @@
--- Hand-mined and drill-mined ore are production statistics only.
+-- The unused on_player_mined_item snooper still accounts if invoked; it stays
+-- disabled because production statistics already include patch ore.
 storage = {}
 defines = {
   events = {
