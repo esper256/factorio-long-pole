@@ -156,6 +156,36 @@ snooper.on_event({
 })
 assert(surface.products["copper-ore"] == nil)
 
+-- Resource amount identifies a patch even when type and prototypes are gone.
+prototypes = nil
+snooper.on_event({
+  entity = {
+    name = "copper-ore",
+    amount = 120,
+    surface = { name = "nauvis" }
+  },
+  buffer = {
+    get_contents = function()
+      error("resource amount must identify an ore patch")
+    end
+  }
+})
+assert(surface.products["copper-ore"] == nil)
+
+-- Fail closed: unknown type is not a harvest source, even if the buffer is ore.
+snooper.on_event({
+  entity = {
+    name = "copper-ore",
+    surface = { name = "nauvis" }
+  },
+  buffer = {
+    get_contents = function()
+      return { { name = "copper-ore", count = 2 } }
+    end
+  }
+})
+assert(surface.products["copper-ore"] == nil)
+
 -- A non-wreck, non-rock entity without a placement item is not a harvest source.
 snooper.on_event({
   entity = {

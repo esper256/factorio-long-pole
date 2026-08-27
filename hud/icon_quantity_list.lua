@@ -3,7 +3,7 @@
 -- the row when the set of icons did not change.
 local M = {}
 
-local ICON_SIZE = 20
+local ICON_SIZE = 8
 local MAX_ENTRIES = 8
 
 function M.add(parent, name, width)
@@ -16,7 +16,8 @@ function M.add(parent, name, width)
   list.style.maximal_width = width
   list.style.margin = 0
   list.style.padding = 0
-  list.style.horizontal_spacing = 4
+  list.style.horizontal_spacing = 0
+  list.style.vertical_spacing = 0
   return list
 end
 
@@ -52,7 +53,7 @@ local function add_item(list, index, entry)
   })
   pair.style.margin = 0
   pair.style.padding = 0
-  pair.style.horizontal_spacing = 2
+  pair.style.horizontal_spacing = 0
   local icon = pair.add({
     type = "sprite",
     name = "item_icon",
@@ -60,12 +61,14 @@ local function add_item(list, index, entry)
   })
   icon.style.width = ICON_SIZE
   icon.style.height = ICON_SIZE
+  icon.style.stretch_image_to_widget_size = true
   local quantity = pair.add({
     type = "label",
     name = "quantity",
     caption = tostring(display_count)
   })
   quantity.style.font = "default-small"
+  quantity.style.padding = 0
 end
 
 local function update_item(pair, entry)

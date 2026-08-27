@@ -51,7 +51,10 @@ icon_quantity_list.refresh(list, {
 })
 
 local first_pair = list.entry_1
+assert(list.style.horizontal_spacing == 0)
 assert(first_pair.item_icon.sprite == "item/iron-gear-wheel")
+assert(first_pair.item_icon.style.width == 8)
+assert(first_pair.item_icon.style.height == 8)
 assert(first_pair.quantity.caption == "12")
 assert(list.entry_2.quantity.caption == "40")
 

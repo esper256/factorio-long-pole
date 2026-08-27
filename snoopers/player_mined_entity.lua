@@ -6,7 +6,7 @@
 --
 -- Ore patches are not tracked here. Hand mining and mining drills both
 -- already increment Factorio production statistics; that graph is the only
--- source for patch ore. Ignore resource entities entirely.
+-- source for patch ore. Unknown / untyped entities are not harvested.
 local game_state = require("game_state.game_state")
 local long_pole_runtime_state = require("runtime_state.long_pole_runtime_state")
 
@@ -21,6 +21,7 @@ M.event_names = {
 }
 
 -- Only these map objects drop items that Factorio omits from production stats.
+-- Anything else, including nil/unknown types, is not a harvest source.
 local HARVESTED_ENTITY_TYPES = {
   tree = true,
   ["simple-entity"] = true,
@@ -90,14 +91,21 @@ local function placement_item(entity)
   return items_to_place[1]
 end
 
--- Production statistics already count this ore. Named-prototype lookup is used
--- because a dying resource may not expose entity.type.
+-- Production statistics already count this ore. Dying resources may omit
+-- entity.type; named prototype, resource_category, and resource amount still
+-- identify a patch. Reading amount on a non-resource errors in Factorio.
 local function is_ore_patch(entity)
   if entity_type_name(entity) == "resource" then
     return true
   end
   local proto = entity_prototype(entity)
-  return proto ~= nil and (proto.type == "resource" or proto.resource_category ~= nil)
+  if proto ~= nil and (proto.type == "resource" or proto.resource_category ~= nil) then
+    return true
+  end
+  local ok, amount = pcall(function()
+    return entity.amount
+  end)
+  return ok and type(amount) == "number"
 end
 
 local function is_loot_source(entity)
@@ -105,7 +113,7 @@ local function is_loot_source(entity)
     return false
   end
   local type_name = entity_type_name(entity)
-  if type_name == "entity-ghost" then
+  if type_name == nil or type_name == "entity-ghost" then
     return false
   end
   if HARVESTED_ENTITY_TYPES[type_name] then
@@ -137,24 +145,26 @@ function M.on_event(event)
 
   local runtime_state = long_pole_runtime_state.get()
   local surface = game_state.surface(runtime_state.ledger, entity.surface.name)
-  local returned_items = buffer_counts(event)
-  local placement_items = returned_placement_item_counts(entity, returned_items)
   local died = event.died == true
   if not died and defines and defines.events and event.name then
     died = event.name == defines.events.on_entity_died
       or event.name == defines.events.script_raised_destroy
   end
 
-  if placement_items then
-    if died then
-      surface:record_destroyed_entities({ [entity.name] = 1 })
-      surface:record_products_destroyed(placement_items)
-    else
-      surface:record_unplaced_entities({ [entity.name] = 1 })
-      surface:record_products_unplaced(placement_items)
+  if placement_item(entity) then
+    local returned_items = buffer_counts(event)
+    local placement_items = returned_placement_item_counts(entity, returned_items)
+    if placement_items then
+      if died then
+        surface:record_destroyed_entities({ [entity.name] = 1 })
+        surface:record_products_destroyed(placement_items)
+      else
+        surface:record_unplaced_entities({ [entity.name] = 1 })
+        surface:record_products_unplaced(placement_items)
+      end
     end
   elseif is_loot_source(entity) and not died then
-    surface:record_products_harvested(returned_items)
+    surface:record_products_harvested(buffer_counts(event))
   end
 end
 

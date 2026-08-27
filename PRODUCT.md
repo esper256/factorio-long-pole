@@ -54,7 +54,7 @@ Ore from patches (hand-mined or by mining drills) is **only** whatever Factorio 
 
 **19. `visibility=` / copied vs reference plan export.** Unexplained. The `[LP]` library book is the plan. Do not add a second export mode.
 
-**21. HUD polish.** A compact framed HUD is in. Still open: how many upcoming splits, and whether Complete is a separate green button vs the stopwatch. Do not add extra chrome beyond previous / current / next.
+**21. HUD polish.** The gameplay HUD is a **tight left-side flow** (about 192px, 8px icons, no frame padding). Do not add a framed panel, split-row clocks, or 20px icon chrome — that hides map and fits fewer shortfalls. Still open: how many upcoming splits, and whether Complete is a separate green button vs the stopwatch. Do not add extra chrome beyond previous / current / next.
 
 ## Non-goals for architecture
 

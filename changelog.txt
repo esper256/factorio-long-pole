@@ -11,7 +11,7 @@ Date: 2026-08-27
     - Ledger harvest covers trees, rocks, wreck loot, robot mining, and script destroy.
     - Recipe selection is a replaceable module; next-split shortfalls walk to limiting ingredients.
     - Ore patches are production statistics only; trees/rocks/wrecks stay harvested.
-    - Compact framed HUD with the run clock in the header and next-split production grouped under that split.
+    - Compact left-side flow HUD (192px, 8px icons, no frame padding) so more of the map stays visible.
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.1
 Date: 2026-07-22

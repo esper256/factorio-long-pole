@@ -45,7 +45,7 @@ game = {
   forces = {
     player = {
       get_item_production_statistics = function(surface)
-        assert(surface.name == "nauvis")
+        assert(surface.name == "nauvis" or surface.name == "platform-1")
         return statistics
       end,
       get_fluid_production_statistics = function(surface)
@@ -91,3 +91,16 @@ assert(products["iron-plate"].consumed == 0)
 assert(products["copper-plate"].produced == 0)
 assert(products.water.produced == 0)
 assert(products.wood.harvested == 4)
+
+-- The same statistics userdata on a second surface must not double loose stock.
+statistics.input_counts = { ["copper-ore"] = 15 }
+statistics.output_counts = {}
+game.surfaces = {
+  { name = "nauvis" },
+  { name = "platform-1" }
+}
+snooper.on_second_tick({})
+assert(storage.long_pole.ledger.surfaces.nauvis.products["copper-ore"].produced == 15)
+local platform_ore = storage.long_pole.ledger.surfaces["platform-1"].products["copper-ore"]
+assert(platform_ore == nil or platform_ore.produced == 0)
+assert(game_state.total_loose_stock(ledger, "copper-ore") == 15)

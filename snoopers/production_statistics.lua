@@ -56,35 +56,45 @@ end
 function M.on_second_tick(_event)
   local force = game.forces.player
   local seen_surfaces = {}
+  -- Factorio may return the same LuaFlowStatistics userdata for more than
+  -- one surface. Writing that snapshot onto every ledger surface doubles
+  -- total_loose_stock (hand-mining 15 ore completing a 30-ore extra).
+  local seen_item_statistics = {}
 
   for _, surface in pairs(game.surfaces) do
     local surface_name = surface.name
     if not seen_surfaces[surface_name] then
       seen_surfaces[surface_name] = true
-      local produced = {}
-      local consumed = {}
-      local produced_rates = {}
-      local consumed_rates = {}
-
       local item_statistics = force.get_item_production_statistics(surface)
-      merge_counts(produced, item_statistics.input_counts)
-      merge_counts(consumed, item_statistics.output_counts)
-      local item_names = union_keys(item_statistics.input_counts, item_statistics.output_counts)
-      merge_rates(produced_rates, item_statistics, "input", item_names)
-      merge_rates(consumed_rates, item_statistics, "output", item_names)
-
-      if force.get_fluid_production_statistics then
-        local fluid_statistics = force.get_fluid_production_statistics(surface)
-        merge_counts(produced, fluid_statistics.input_counts)
-        merge_counts(consumed, fluid_statistics.output_counts)
-        local fluid_names = union_keys(fluid_statistics.input_counts, fluid_statistics.output_counts)
-        merge_rates(produced_rates, fluid_statistics, "input", fluid_names)
-        merge_rates(consumed_rates, fluid_statistics, "output", fluid_names)
-      end
-
       local ledger = long_pole_runtime_state.ledger()
-      game_state.reconcile_product_statistics(ledger, surface_name, produced, consumed)
-      game_state.reconcile_product_flow_rates(ledger, surface_name, produced_rates, consumed_rates)
+      if seen_item_statistics[item_statistics] then
+        game_state.reconcile_product_statistics(ledger, surface_name, {}, {})
+        game_state.reconcile_product_flow_rates(ledger, surface_name, {}, {})
+      else
+        seen_item_statistics[item_statistics] = true
+        local produced = {}
+        local consumed = {}
+        local produced_rates = {}
+        local consumed_rates = {}
+
+        merge_counts(produced, item_statistics.input_counts)
+        merge_counts(consumed, item_statistics.output_counts)
+        local item_names = union_keys(item_statistics.input_counts, item_statistics.output_counts)
+        merge_rates(produced_rates, item_statistics, "input", item_names)
+        merge_rates(consumed_rates, item_statistics, "output", item_names)
+
+        if force.get_fluid_production_statistics then
+          local fluid_statistics = force.get_fluid_production_statistics(surface)
+          merge_counts(produced, fluid_statistics.input_counts)
+          merge_counts(consumed, fluid_statistics.output_counts)
+          local fluid_names = union_keys(fluid_statistics.input_counts, fluid_statistics.output_counts)
+          merge_rates(produced_rates, fluid_statistics, "input", fluid_names)
+          merge_rates(consumed_rates, fluid_statistics, "output", fluid_names)
+        end
+
+        game_state.reconcile_product_statistics(ledger, surface_name, produced, consumed)
+        game_state.reconcile_product_flow_rates(ledger, surface_name, produced_rates, consumed_rates)
+      end
     end
   end
 end
